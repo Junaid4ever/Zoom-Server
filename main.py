@@ -3,7 +3,8 @@
 # ============================================
 import os
 import uuid
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
@@ -30,6 +31,7 @@ app.add_middleware(
 
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
+# Store workers and tasks
 workers = {}
 running_tasks = {}
 
@@ -44,6 +46,7 @@ class StartBotRequest(BaseModel):
 class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
 
+# ----- SOCKET.IO EVENTS -----
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}")
@@ -80,9 +83,17 @@ async def update_capacity(sid, data):
 async def task_completed(sid, data):
     tid = data.get("task_id")
     if tid and tid in running_tasks:
+        # Update capacity for the worker who completed this task
+        wid = running_tasks[tid].get("worker_id")
+        if wid and wid in workers:
+            workers[wid]["free_capacity"] = min(
+                workers[wid]["max_capacity"],
+                workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+            )
         del running_tasks[tid]
         print(f"[SIO] Task completed: {tid}")
 
+# ----- API ENDPOINTS -----
 @app.get("/health")
 async def health():
     return {"ok": True, "workers": len(workers)}
@@ -91,10 +102,23 @@ async def health():
 @app.get("/api/status")
 async def status():
     total_free = sum(w.get("free_capacity", 0) for w in workers.values())
+    # Calculate remaining time for each task
+    now = datetime.now()
+    for tid, task in running_tasks.items():
+        if "started_at" in task:
+            started = datetime.fromisoformat(task["started_at"])
+            elapsed = (now - started).total_seconds() / 60
+            task["elapsed_minutes"] = round(elapsed, 1)
+            task["remaining_minutes"] = max(0, round(task.get("duration_minutes", 120) - elapsed, 1))
+            if task["remaining_minutes"] <= 0:
+                # Auto-complete task if time is up
+                task["remaining_minutes"] = 0
+    
     return {
         "workers": workers,
         "running_tasks": running_tasks,
-        "total_free_capacity": total_free
+        "total_free_capacity": total_free,
+        "timestamp": now.isoformat()
     }
 
 @app.post("/api/start-bots")
@@ -137,7 +161,9 @@ async def start_bots(req: StartBotRequest):
             "bot_count": give,
             "worker_id": wid,
             "name_type": payload["name_type"],
-            "started_at": datetime.now().isoformat()
+            "duration_minutes": req.duration_minutes,
+            "started_at": datetime.now().isoformat(),
+            "remaining_minutes": req.duration_minutes
         }
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
@@ -158,200 +184,517 @@ async def start_bots(req: StartBotRequest):
 @app.post("/api/kill-meeting")
 async def terminate(req: Optional[TerminateRequest] = None):
     meeting = req.meeting_code if req else None
-    await sio.emit("terminate", {"meeting_code": meeting})
     if meeting:
+        # Kill specific meeting
+        await sio.emit("terminate", {"meeting_code": meeting})
+        # Remove from running_tasks
         for tid in list(running_tasks.keys()):
             if running_tasks[tid].get("meeting_code") == meeting:
+                # Restore capacity for the worker
+                wid = running_tasks[tid].get("worker_id")
+                if wid and wid in workers:
+                    workers[wid]["free_capacity"] = min(
+                        workers[wid]["max_capacity"],
+                        workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                    )
                 del running_tasks[tid]
+        print(f"[API] Terminate → {meeting}")
     else:
+        # Kill ALL (only if explicitly called)
+        await sio.emit("terminate", {"meeting_code": None})
+        for tid in list(running_tasks.keys()):
+            wid = running_tasks[tid].get("worker_id")
+            if wid and wid in workers:
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
         running_tasks.clear()
-    for wid in workers:
-        workers[wid]["free_capacity"] = workers[wid]["max_capacity"]
-    print(f"[API] Terminate → {meeting or 'ALL'}")
+        print(f"[API] Terminate → ALL")
+    
     return {"success": True, "message": "Terminate sent"}
 
+# ============================================
+# REDESIGNED DASHBOARD - "Junaid Members Panel (Zoom)"
+# ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Zoom Master Dashboard</title>
+<title>Junaid Members Panel (Zoom)</title>
 <style>
+/* ----- RESET & BASE ----- */
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Segoe UI,sans-serif;background:#0d1117;color:#c9d1d9;padding:20px}
-.container{max-width:1200px;margin:0 auto}
-h1{color:#58a6ff;margin-bottom:8px}
-.subtitle{color:#8b949e;margin-bottom:20px;font-size:14px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
-.stat{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px;text-align:center}
-.stat .n{font-size:24px;font-weight:700;color:#58a6ff}
-.stat .l{font-size:11px;color:#8b949e;margin-top:4px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px;margin-bottom:16px}
-.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.fg{display:flex;flex-direction:column;gap:4px}
-.fg label{font-size:11px;color:#8b949e;text-transform:uppercase}
-.fg input,.fg select,textarea{padding:8px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
-.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
-.btn{padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px}
-.btn-p{background:#238636;color:#fff}
-.btn-d{background:#da3633;color:#fff}
-.btn-s{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
-.btn-sm{padding:4px 10px;font-size:12px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:8px;border-bottom:1px solid #21262d;text-align:left}
-th{color:#8b949e}
-.workers{display:flex;flex-wrap:wrap;gap:8px}
-.w{background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:4px 10px;font-family:monospace;font-size:12px}
-#customBox{display:none;margin-top:14px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:8px}
-.log{margin-top:10px;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;font-family:monospace;font-size:12px}
-.ok{color:#3fb950}.err{color:#f85149}.info{color:#58a6ff}
+body{
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0a0e17;
+  color: #e6edf3;
+  min-height: 100vh;
+  padding: 20px;
+}
+.container{max-width:1400px;margin:0 auto}
+
+/* ----- HEADER ----- */
+.header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 24px;
+  background:linear-gradient(135deg,#0d1b2a,#1b2d45);
+  border-radius:16px;
+  border:1px solid #1e3a5f;
+  margin-bottom:24px;
+  flex-wrap:wrap;gap:12px;
+}
+.header h1{
+  font-size:26px;font-weight:700;
+  background:linear-gradient(90deg,#58a6ff,#79c0ff);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:0.5px;
+}
+.header h1 span{font-weight:300;color:#8b949e;-webkit-text-fill-color:#8b949e}
+.header .status-badge{
+  display:flex;align-items:center;gap:8px;
+  background:#0d1117;padding:6px 16px;border-radius:20px;
+  border:1px solid #238636;font-size:13px;
+}
+.header .status-badge .dot{
+  width:10px;height:10px;border-radius:50%;
+  background:#3fb950;animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ----- MAIN LAYOUT: LEFT (Input) + RIGHT (Workers) ----- */
+.main-grid{
+  display:grid;grid-template-columns:1fr 320px;gap:20px;
+}
+@media(max-width:900px){.main-grid{grid-template-columns:1fr}}
+
+/* ----- CARDS ----- */
+.card{
+  background:#0d1117;border:1px solid #21262d;border-radius:12px;
+  padding:20px;margin-bottom:16px;
+}
+.card-title{
+  font-size:14px;font-weight:600;color:#8b949e;
+  text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;
+}
+
+/* ----- LEFT SIDE: INPUT FORM ----- */
+.form-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
+
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:12px;color:#8b949e;font-weight:500}
+.form-group input,.form-group select,.form-group textarea{
+  padding:10px 12px;background:#0d1117;border:1px solid #30363d;
+  border-radius:8px;color:#e6edf3;font-size:14px;
+  transition:border-color 0.2s;
+}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  outline:none;border-color:#58a6ff;box-shadow:0 0 0 3px rgba(88,166,255,0.15);
+}
+.form-group textarea{resize:vertical;font-family:monospace;font-size:13px}
+
+/* ----- CUSTOM NAMES BOX ----- */
+#customBox{
+  display:none;margin-top:12px;padding:14px;
+  background:#0d1117;border:1px solid #30363d;border-radius:8px;
+}
+#customBox .name-status{font-size:12px;color:#8b949e;margin-top:6px}
+#customBox .name-status .ok{color:#3fb950}
+#customBox .name-status .err{color:#f85149}
+
+/* ----- BUTTONS ----- */
+.btn{
+  padding:10px 22px;border:none;border-radius:8px;
+  font-weight:600;font-size:14px;cursor:pointer;
+  transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;
+}
+.btn-primary{background:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043;transform:translateY(-1px)}
+.btn-danger{background:#da3633;color:#fff}
+.btn-danger:hover{background:#f85149;transform:translateY(-1px)}
+.btn-outline{background:transparent;color:#8b949e;border:1px solid #30363d}
+.btn-outline:hover{background:#21262d;color:#e6edf3}
+.btn-sm{padding:4px 12px;font-size:12px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+
+/* ----- RIGHT SIDE: WORKERS PANEL ----- */
+.workers-panel{
+  background:#0d1117;border:1px solid #21262d;border-radius:12px;
+  padding:16px;height:fit-content;position:sticky;top:20px;
+}
+.workers-panel .panel-title{
+  font-size:14px;font-weight:600;color:#8b949e;
+  text-transform:uppercase;letter-spacing:0.5px;
+  margin-bottom:12px;display:flex;justify-content:space-between;
+}
+.workers-panel .panel-title span{color:#58a6ff}
+.workers-scroll{
+  max-height:500px;overflow-y:auto;padding-right:4px;
+}
+.workers-scroll::-webkit-scrollbar{width:4px}
+.workers-scroll::-webkit-scrollbar-track{background:#0d1117}
+.workers-scroll::-webkit-scrollbar-thumb{background:#30363d;border-radius:4px}
+
+.worker-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;background:#0d1117;border:1px solid #21262d;
+  border-radius:8px;margin-bottom:6px;
+  font-size:13px;font-family:monospace;
+}
+.worker-item .name{color:#58a6ff}
+.worker-item .cap{color:#8b949e}
+.worker-item .cap .free{color:#3fb950}
+.worker-item .online{color:#3fb950;font-size:10px}
+
+/* ----- ACTIVE MEETINGS TABLE ----- */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #21262d}
+th{color:#8b949e;font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:0.3px}
+tr:hover td{background:#161b22}
+.meeting-code{font-weight:600;color:#58a6ff;font-family:monospace}
+.badge{
+  display:inline-block;padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:500;
+}
+.badge-indian{background:#1a3a2a;color:#3fb950}
+.badge-english{background:#1a2a4a;color:#58a6ff}
+.badge-custom{background:#3a2a1a;color:#d29922}
+
+.timer-bar{
+  display:flex;align-items:center;gap:10px;
+}
+.timer-bar .progress{
+  flex:1;height:4px;background:#21262d;border-radius:4px;overflow:hidden;
+}
+.timer-bar .progress .fill{
+  height:100%;border-radius:4px;transition:width 1s linear;
+}
+.timer-bar .time-text{
+  font-family:monospace;font-size:13px;min-width:50px;text-align:right;
+  color:#8b949e;
+}
+.timer-bar .time-text.warning{color:#d29922}
+.timer-bar .time-text.danger{color:#f85149}
+
+/* ----- STATUS / LOG ----- */
+.log{
+  margin-top:12px;padding:10px 14px;background:#0d1117;
+  border:1px solid #21262d;border-radius:8px;
+  font-family:monospace;font-size:13px;min-height:40px;
+  color:#8b949e;
+}
+.log .ok{color:#3fb950}
+.log .err{color:#f85149}
+.log .info{color:#58a6ff}
+
+/* ----- EMPTY STATE ----- */
+.empty{text-align:center;color:#8b949e;padding:30px 0;font-size:14px}
+
+/* ----- RESPONSIVE TWEAKS ----- */
+@media(max-width:600px){
+  .header h1{font-size:18px}
+  .workers-panel{position:static}
+  .btn{padding:8px 14px;font-size:13px}
+}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>🚀 Zoom Master Dashboard</h1>
-  <div class="subtitle">Colab workers · capacity accumulates</div>
-  <div class="stats">
-    <div class="stat"><div class="n" id="totalCap">0</div><div class="l">Total Capacity</div></div>
-    <div class="stat"><div class="n" id="freeCap">0</div><div class="l">Free Capacity</div></div>
-    <div class="stat"><div class="n" id="workersN">0</div><div class="l">Workers</div></div>
-    <div class="stat"><div class="n" id="tasksN">0</div><div class="l">Active Tasks</div></div>
-    <div class="stat"><div class="n" id="botsN">0</div><div class="l">Running Bots</div></div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>🚀 Junaid <span>Members Panel (Zoom)</span></h1>
+    <div class="status-badge">
+      <span class="dot"></span>
+      <span id="statusText">Connected</span>
+      <span style="color:#8b949e;margin-left:8px">|</span>
+      <span id="liveTime" style="font-family:monospace;font-size:12px;color:#8b949e"></span>
+    </div>
   </div>
-  <div class="card">
-    <h2>📌 Start Bots</h2>
-    <div class="grid">
-      <div class="fg"><label>Meeting ID</label><input id="meetingId" placeholder="5415403058"/></div>
-      <div class="fg"><label>Passcode</label><input id="passcode" placeholder="optional"/></div>
-      <div class="fg"><label>Bots</label><input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/></div>
-      <div class="fg"><label>Duration (min)</label><input type="number" id="duration" value="120" min="1"/></div>
-      <div class="fg">
-        <label>Name Type</label>
-        <select id="nameType" onchange="toggleCustom()">
-          <option value="indian">🇮🇳 Indian (Natural)</option>
-          <option value="english">🇺🇸 English</option>
-          <option value="custom">✏️ Custom Names</option>
-        </select>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT COLUMN -->
+    <div>
+
+      <!-- START BOTS CARD -->
+      <div class="card">
+        <div class="card-title">📌 Start New Meeting</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Meeting ID</label>
+            <input id="meetingId" placeholder="5415403058"/>
+          </div>
+          <div class="form-group">
+            <label>Passcode</label>
+            <input id="passcode" placeholder="optional"/>
+          </div>
+          <div class="form-group">
+            <label>Bots</label>
+            <input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/>
+          </div>
+          <div class="form-group">
+            <label>Duration (min)</label>
+            <input type="number" id="duration" value="120" min="1"/>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Name Type</label>
+            <select id="nameType" onchange="toggleCustom()">
+              <option value="indian">🇮🇳 Indian (Natural)</option>
+              <option value="english">🇺🇸 English</option>
+              <option value="custom">✏️ Custom Names</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Custom Names Box -->
+        <div id="customBox">
+          <label style="font-size:12px;color:#8b949e">Custom names (one per line)</label>
+          <textarea id="customNames" rows="4" placeholder="Rahul Sharma&#10;Arjun Singh&#10;Priya Patel"></textarea>
+          <div class="name-status">
+            Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong>
+            <span id="nameStatus"></span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" onclick="startBots()">🚀 Start Bots</button>
+          <button class="btn btn-outline" onclick="refresh()">🔄 Refresh</button>
+        </div>
+        <div id="msg" class="log">✅ Ready</div>
+      </div>
+
+      <!-- ACTIVE MEETINGS CARD -->
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>📋 Active Meetings</span>
+          <span id="taskCount" style="color:#8b949e;font-weight:400;text-transform:none">0 running</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Meeting</th>
+                <th>Bots</th>
+                <th>Type</th>
+                <th>Started</th>
+                <th>Time Left</th>
+                <th style="text-align:center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="6" class="empty">No active meetings</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: WORKERS -->
+    <div class="workers-panel">
+      <div class="panel-title">
+        <span>🖥️ Connected Workers</span>
+        <span id="workerCount">0</span>
+      </div>
+      <div class="workers-scroll" id="wlist">
+        <div class="empty" style="padding:20px 0">No workers connected</div>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #21262d;font-size:12px;color:#8b949e">
+        Total Capacity: <strong id="totalCap">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCap">0</strong>
       </div>
     </div>
-    <div id="customBox">
-      <label style="font-size:12px;color:#8b949e">Custom names (one per line)</label>
-      <textarea id="customNames" rows="4" placeholder="Rahul Sharma&#10;arjun - 786"></textarea>
-      <div style="font-size:12px;color:#8b949e;margin-top:6px">
-        Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">10</strong>
-        <span id="nameStatus"></span>
-      </div>
-    </div>
-    <div class="actions">
-      <button class="btn btn-p" onclick="startBots()">🚀 Start Bots</button>
-      <button class="btn btn-d" onclick="killAll()">⏹️ Kill All</button>
-      <button class="btn btn-s" onclick="refresh()">🔄 Refresh</button>
-    </div>
-    <div id="msg" class="log">Ready</div>
-  </div>
-  <div class="card">
-    <h2>📋 Active Tasks</h2>
-    <table>
-      <thead><tr><th>Task</th><th>Meeting</th><th>Bots</th><th>Type</th><th>Started</th><th></th></tr></thead>
-      <tbody id="tbody"><tr><td colspan="6" style="text-align:center;color:#8b949e">No tasks</td></tr></tbody>
-    </table>
-  </div>
-  <div class="card">
-    <h2>🖥️ Workers</h2>
-    <div id="wlist" class="workers"><span style="color:#8b949e">No workers — run Colab cell</span></div>
+
   </div>
 </div>
+
 <script>
+// ===== CONFIG =====
 const API = location.origin;
+
+// ===== DOM REFS =====
+const $ = id => document.getElementById(id);
+const meetingId = $('meetingId');
+const passcode = $('passcode');
+const botCount = $('botCount');
+const duration = $('duration');
+const nameType = $('nameType');
+const customNames = $('customNames');
+const customBox = $('customBox');
+const msg = $('msg');
+const tbody = $('tbody');
+const wlist = $('wlist');
+const totalCap = $('totalCap');
+const freeCap = $('freeCap');
+const workerCount = $('workerCount');
+const taskCount = $('taskCount');
+const statusText = $('statusText');
+const liveTime = $('liveTime');
+
+// ===== HELPERS =====
+function show(m, type='info'){
+  const cls = type==='ok'?'ok':type==='err'?'err':'info';
+  msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
+}
+
 function toggleCustom(){
-  document.getElementById('customBox').style.display =
-    document.getElementById('nameType').value==='custom'?'block':'none';
+  customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
   updCount();
 }
+
 function updCount(){
-  const bots = parseInt(document.getElementById('botCount').value)||0;
-  const names = document.getElementById('customNames').value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-  document.getElementById('nameCount').textContent = names.length;
-  document.getElementById('needCount').textContent = bots;
-  const st = document.getElementById('nameStatus');
-  if(document.getElementById('nameType').value!=='custom'){ st.innerHTML=''; return; }
-  st.innerHTML = names.length>=bots ? ' <span class="ok">✅ Enough</span>' : ` <span class="err">❌ Need ${bots-names.length} more</span>`;
+  const bots = parseInt(botCount.value) || 0;
+  const names = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+  $('nameCount').textContent = names.length;
+  $('needCount').textContent = bots;
+  const st = $('nameStatus');
+  if(nameType.value !== 'custom'){ st.innerHTML = ''; return; }
+  st.innerHTML = names.length >= bots ? ' <span class="ok">✅ Enough</span>' : ` <span class="err">❌ Need ${bots - names.length} more</span>`;
 }
-document.getElementById('customNames').addEventListener('input', updCount);
-function show(m,t='info'){
-  document.getElementById('msg').innerHTML = `<span class="${t}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
-}
+customNames.addEventListener('input', updCount);
+
+// ===== API CALLS =====
 async function refresh(){
   try{
     const r = await fetch(API+'/status');
     const d = await r.json();
-    const workers = d.workers||{};
-    const tasks = d.running_tasks||{};
-    let total=0, free=d.total_free_capacity||0, running=0;
-    Object.values(workers).forEach(w=> total += w.max_capacity||0);
-    Object.values(tasks).forEach(t=> running += t.bot_count||0);
-    document.getElementById('totalCap').textContent = total;
-    document.getElementById('freeCap').textContent = free;
-    document.getElementById('workersN').textContent = Object.keys(workers).length;
-    document.getElementById('tasksN').textContent = Object.keys(tasks).length;
-    document.getElementById('botsN').textContent = running;
-    const wl = document.getElementById('wlist');
-    if(!Object.keys(workers).length) wl.innerHTML='<span style="color:#8b949e">No workers — run Colab cell</span>';
-    else wl.innerHTML = Object.entries(workers).map(([id,w])=>
-      `<div class="w">🟢 ${id} → ${w.free_capacity}/${w.max_capacity}</div>`).join('');
-    const tb = document.getElementById('tbody');
-    const keys = Object.keys(tasks);
-    if(!keys.length) tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#8b949e">No tasks</td></tr>';
-    else tb.innerHTML = keys.map(tid=>{
-      const t=tasks[tid];
-      return `<tr>
-        <td>${tid}</td><td><b>${t.meeting_code}</b></td><td>${t.bot_count}</td>
-        <td>${t.name_type||'-'}</td>
-        <td>${t.started_at?new Date(t.started_at).toLocaleTimeString():'-'}</td>
-        <td><button class="btn btn-d btn-sm" onclick="kill('${t.meeting_code}')">Kill</button></td>
-      </tr>`;
-    }).join('');
-    show('Status refreshed','ok');
-  }catch(e){ show(e.message,'err'); }
-}
-async function startBots(){
-  const meetingId = document.getElementById('meetingId').value.trim().replace(/\s/g,'');
-  const passcode = document.getElementById('passcode').value.trim();
-  const botCount = parseInt(document.getElementById('botCount').value)||10;
-  const duration = parseInt(document.getElementById('duration').value)||120;
-  const nameType = document.getElementById('nameType').value;
-  let custom = null;
-  if(nameType==='custom'){
-    custom = document.getElementById('customNames').value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-    if(custom.length < botCount) return show('Need '+(botCount-custom.length)+' more names','err');
+    const workers = d.workers || {};
+    const tasks = d.running_tasks || {};
+
+    // Update stats
+    let total=0, free=0;
+    Object.values(workers).forEach(w=>{
+      total += w.max_capacity || 0;
+      free += w.free_capacity || 0;
+    });
+    totalCap.textContent = total;
+    freeCap.textContent = free;
+    workerCount.textContent = Object.keys(workers).length;
+    taskCount.textContent = Object.keys(tasks).length + ' running';
+
+    // Workers list
+    const wKeys = Object.keys(workers);
+    if(!wKeys.length){
+      wlist.innerHTML = '<div class="empty" style="padding:20px 0">No workers connected</div>';
+    } else {
+      wlist.innerHTML = wKeys.map(id => {
+        const w = workers[id];
+        const free = w.free_capacity ?? 0;
+        const max = w.max_capacity ?? 0;
+        const pct = max > 0 ? Math.round((free/max)*100) : 0;
+        return `<div class="worker-item">
+          <span class="name">🟢 ${id}</span>
+          <span class="cap">${free}/${max} <span class="free">(${pct}%)</span></span>
+        </div>`;
+      }).join('');
+    }
+
+    // Tasks table
+    const tKeys = Object.keys(tasks);
+    if(!tKeys.length){
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No active meetings</td></tr>';
+    } else {
+      tbody.innerHTML = tKeys.map(tid => {
+        const t = tasks[tid];
+        const meeting = t.meeting_code || 'N/A';
+        const bots = t.bot_count || 0;
+        const type = t.name_type || 'indian';
+        const started = t.started_at ? new Date(t.started_at).toLocaleTimeString() : '-';
+        const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
+        const totalDur = t.duration_minutes || 120;
+        const pct = totalDur > 0 ? ((totalDur - Math.max(0, remaining)) / totalDur * 100) : 0;
+        const pctClamped = Math.min(100, Math.max(0, pct));
+        const warn = remaining < 5 ? 'danger' : remaining < 15 ? 'warning' : '';
+        const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
+        return `<tr>
+          <td class="meeting-code">${meeting}</td>
+          <td>${bots}</td>
+          <td><span class="badge badge-${typeBadge}">${type}</span></td>
+          <td>${started}</td>
+          <td>
+            <div class="timer-bar">
+              <div class="progress">
+                <div class="fill" style="width:${pctClamped}%;background:${remaining < 5 ? '#f85149' : remaining < 15 ? '#d29922' : '#3fb950'}"></div>
+              </div>
+              <span class="time-text ${warn}">${remaining > 0 ? Math.ceil(remaining)+'m' : '0m'}</span>
+            </div>
+          </td>
+          <td style="text-align:center">
+            <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">✕ Kill</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Update live time
+    liveTime.textContent = new Date().toLocaleTimeString();
+    statusText.textContent = 'Connected';
+    show('Status refreshed', 'ok');
+  } catch(e){
+    statusText.textContent = 'Offline';
+    show(e.message || 'Refresh failed', 'err');
   }
-  if(!meetingId) return show('Meeting ID required','err');
+}
+
+// ===== START BOTS =====
+async function startBots(){
+  const meeting = meetingId.value.trim().replace(/\s/g,'');
+  const pass = passcode.value.trim();
+  const bots = parseInt(botCount.value) || 10;
+  const dur = parseInt(duration.value) || 120;
+  const type = nameType.value;
+  let custom = null;
+  if(type === 'custom'){
+    custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+    if(custom.length < bots) return show('Need '+(bots - custom.length)+' more names', 'err');
+  }
+  if(!meeting) return show('Meeting ID required', 'err');
+
   try{
-    show('Starting...','info');
-    const r = await fetch(API+'/api/start-bots',{
+    show('Starting...', 'info');
+    const r = await fetch(API+'/api/start-bots', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        meeting_code: meetingId, passcode, bot_count: botCount,
-        duration_minutes: duration, name_type: nameType, custom_names: custom
+        meeting_code: meeting, passcode: pass, bot_count: bots,
+        duration_minutes: dur, name_type: type, custom_names: custom
       })
     });
     const d = await r.json();
-    if(r.ok){ show(d.message||'Started','ok'); setTimeout(refresh,1500); }
-    else show(d.detail||'Failed','err');
-  }catch(e){ show(e.message,'err'); }
+    if(r.ok){
+      show(d.message || 'Started successfully!', 'ok');
+      setTimeout(refresh, 1000);
+    } else {
+      show(d.detail || 'Failed to start', 'err');
+    }
+  } catch(e){ show(e.message, 'err'); }
 }
-async function kill(code){
-  if(!confirm('Kill '+code+'?')) return;
-  await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:code})});
-  show('Kill sent','ok'); setTimeout(refresh,1500);
+
+// ===== KILL MEETING =====
+async function killMeeting(code){
+  if(!confirm(`Kill meeting ${code}?`)) return;
+  try{
+    const r = await fetch(API+'/api/terminate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({meeting_code: code})
+    });
+    const d = await r.json();
+    if(r.ok){
+      show(`✅ Kill sent for ${code}`, 'ok');
+      setTimeout(refresh, 1000);
+    } else {
+      show(d.detail || 'Kill failed', 'err');
+    }
+  } catch(e){ show(e.message, 'err'); }
 }
-async function killAll(){
-  if(!confirm('Kill ALL?')) return;
-  await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-  show('Kill all sent','ok'); setTimeout(refresh,1500);
-}
-setInterval(refresh,8000);
+
+// ===== AUTO REFRESH (every 5s) =====
+setInterval(refresh, 5000);
 refresh();
 </script>
 </body>
