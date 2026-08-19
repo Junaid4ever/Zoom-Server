@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL - Railway (FULL + THEME)
+# ZOOM BOT CENTRAL - Railway (FULL + MODE TOGGLE)
 # ============================================
 import os
 import uuid
@@ -31,7 +31,6 @@ app.add_middleware(
 
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
-# Store workers and tasks
 workers = {}
 running_tasks = {}
 
@@ -42,12 +41,13 @@ class StartBotRequest(BaseModel):
     duration_minutes: int = 120
     name_type: str = "indian"
     custom_names: Optional[List[str]] = None
+    join_mode: str = "individual"   # "together" or "individual"
 
 class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
-# ----- SOCKET.IO EVENTS -----
+# ----- SOCKET.IO EVENTS (unchanged) -----
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}")
@@ -93,7 +93,7 @@ async def task_completed(sid, data):
         del running_tasks[tid]
         print(f"[SIO] Task completed: {tid}")
 
-# ----- API ENDPOINTS -----
+# ----- API -----
 @app.get("/health")
 async def health():
     return {"ok": True, "workers": len(workers)}
@@ -149,7 +149,8 @@ async def start_bots(req: StartBotRequest):
             "bot_count": give,
             "duration_minutes": req.duration_minutes,
             "name_type": req.name_type or "indian",
-            "custom_names": req.custom_names
+            "custom_names": req.custom_names,
+            "join_mode": req.join_mode or "individual"   # <-- NEW
         }
         await sio.emit("new_task", payload, to=info["sid"])
         running_tasks[task_id] = {
@@ -160,12 +161,13 @@ async def start_bots(req: StartBotRequest):
             "name_type": payload["name_type"],
             "duration_minutes": req.duration_minutes,
             "started_at": datetime.now().isoformat(),
-            "remaining_minutes": req.duration_minutes
+            "remaining_minutes": req.duration_minutes,
+            "join_mode": req.join_mode or "individual"   # store for display
         }
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
         remaining -= give
-        print(f"[API] Task {task_id} → {wid} ({give} bots)")
+        print(f"[API] Task {task_id} → {wid} ({give} bots) mode={req.join_mode}")
 
     if not assigned:
         raise HTTPException(503, "No free capacity. Start Colab worker first.")
@@ -181,7 +183,6 @@ async def start_bots(req: StartBotRequest):
 @app.post("/api/kill-meeting")
 async def terminate(req: Optional[TerminateRequest] = None):
     if req and req.task_id:
-        # Kill specific task by task_id
         task_id = req.task_id
         if task_id not in running_tasks:
             raise HTTPException(404, "Task not found")
@@ -198,7 +199,6 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": f"Task {task_id} terminated"}
 
     elif req and req.meeting_code:
-        # Kill all tasks for a meeting_code (legacy)
         meeting = req.meeting_code
         await sio.emit("terminate", {"meeting_code": meeting})
         for tid in list(running_tasks.keys()):
@@ -214,7 +214,6 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": f"Meeting {meeting} terminated"}
 
     else:
-        # Kill ALL
         await sio.emit("terminate", {"meeting_code": None})
         for tid in list(running_tasks.keys()):
             wid = running_tasks[tid].get("worker_id")
@@ -228,7 +227,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# REDESIGNED DASHBOARD (Dark/Light + Mobile)
+# DASHBOARD HTML (WITH MODE TOGGLE)
 # ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -237,7 +236,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
 <title>Junaid Members Panel (Zoom)</title>
 <style>
-/* ----- CSS VARIABLES (Themes) ----- */
+/* ----- CSS VARIABLES (same as before) ----- */
 :root {
   --bg-body: #0a0e17;
   --bg-card: #0d1117;
@@ -259,7 +258,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   --scrollbar-thumb: #30363d;
   --hover-bg: #161b22;
 }
-
 [data-theme="light"] {
   --bg-body: #f0f6fc;
   --bg-card: #ffffff;
@@ -281,8 +279,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   --scrollbar-thumb: #c0c8d0;
   --hover-bg: #f6f8fa;
 }
-
-/* ----- RESET & BASE ----- */
+/* ----- RESET (same) ----- */
 *{margin:0;padding:0;box-sizing:border-box}
 body{
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
@@ -293,8 +290,6 @@ body{
   transition: background 0.3s, color 0.3s;
 }
 .container{max-width:1400px;margin:0 auto}
-
-/* ----- HEADER ----- */
 .header{
   display:flex;justify-content:space-between;align-items:center;
   padding:12px 20px;
@@ -323,7 +318,6 @@ body{
   background:var(--accent-green);animation:pulse 2s infinite;
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-
 .theme-toggle{
   background:var(--bg-card);border:1px solid var(--border-color);
   border-radius:30px;padding:4px 12px;cursor:pointer;
@@ -331,14 +325,10 @@ body{
   color:var(--text-primary);
 }
 .theme-toggle:hover{transform:scale(1.05);border-color:var(--accent-blue)}
-
-/* ----- MAIN GRID (left input + right workers) ----- */
 .main-grid{
   display:grid;grid-template-columns:1fr 300px;gap:16px;
 }
 @media(max-width:860px){.main-grid{grid-template-columns:1fr}}
-
-/* ----- CARDS ----- */
 .card{
   background:var(--bg-card);border:1px solid var(--border-color);
   border-radius:12px;padding:16px;margin-bottom:16px;
@@ -348,8 +338,6 @@ body{
   font-size:13px;font-weight:600;color:var(--text-secondary);
   text-transform:uppercase;letter-spacing:0.4px;margin-bottom:12px;
 }
-
-/* ----- FORM ----- */
 .form-grid{
   display:grid;grid-template-columns:1fr 1fr;gap:10px;
 }
@@ -365,7 +353,6 @@ body{
   outline:none;border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(88,166,255,0.15);
 }
 .form-group textarea{resize:vertical;font-family:monospace;font-size:13px}
-
 #customBox{
   display:none;margin-top:10px;padding:12px;
   background:var(--bg-body);border:1px solid var(--border-color);border-radius:8px;
@@ -373,7 +360,6 @@ body{
 #customBox .name-status{font-size:12px;color:var(--text-secondary);margin-top:6px}
 #customBox .name-status .ok{color:var(--accent-green)}
 #customBox .name-status .err{color:var(--accent-red)}
-
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .btn{
   padding:8px 18px;border:none;border-radius:8px;
@@ -387,7 +373,6 @@ body{
 .btn-outline{background:transparent;color:var(--text-secondary);border:1px solid var(--border-color)}
 .btn-outline:hover{background:var(--hover-bg);color:var(--text-primary)}
 .btn-sm{padding:3px 10px;font-size:12px}
-
 .log{
   margin-top:12px;padding:8px 12px;background:var(--bg-body);
   border:1px solid var(--border-color);border-radius:8px;
@@ -397,8 +382,6 @@ body{
 .log .ok{color:var(--accent-green)}
 .log .err{color:var(--accent-red)}
 .log .info{color:var(--accent-blue)}
-
-/* ----- WORKERS PANEL (right) ----- */
 .workers-panel{
   background:var(--bg-card);border:1px solid var(--border-color);
   border-radius:12px;padding:16px;height:fit-content;
@@ -425,8 +408,6 @@ body{
 .worker-item .cap{color:var(--text-secondary)}
 .worker-item .cap .free{color:var(--accent-green)}
 .worker-item .online{color:var(--accent-green);font-size:10px}
-
-/* ----- TABLE ----- */
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border-color)}
@@ -457,6 +438,33 @@ tr:hover td{background:var(--hover-bg)}
 .timer-bar .time-text.danger{color:var(--accent-red)}
 .empty{text-align:center;color:var(--text-secondary);padding:20px 0;font-size:13px}
 .footer-meta{margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);font-size:12px;color:var(--text-secondary)}
+/* ----- MODE TOGGLE (switch) ----- */
+.mode-switch{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 12px;background:var(--bg-card);border:1px solid var(--border-color);
+  border-radius:30px;font-size:12px;color:var(--text-secondary);
+}
+.mode-switch label{
+  display:flex;align-items:center;gap:4px;cursor:pointer;
+  transition:color 0.2s;
+}
+.mode-switch input[type="checkbox"]{
+  appearance:none;width:34px;height:18px;background:var(--border-color);
+  border-radius:20px;position:relative;cursor:pointer;transition:background 0.3s;
+  flex-shrink:0;
+}
+.mode-switch input[type="checkbox"]::after{
+  content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;
+  background:var(--bg-card);border-radius:50%;transition:transform 0.3s;
+}
+.mode-switch input[type="checkbox"]:checked{
+  background:var(--accent-blue);
+}
+.mode-switch input[type="checkbox"]:checked::after{
+  transform:translateX(16px);
+}
+.mode-switch .mode-label{font-weight:500;white-space:nowrap}
+.mode-switch .mode-label.active{color:var(--accent-blue)}
 </style>
 </head>
 <body>
@@ -471,6 +479,13 @@ tr:hover td{background:var(--hover-bg)}
         <span style="color:var(--text-muted);margin-left:4px">|</span>
         <span id="liveTime" style="font-family:monospace;font-size:12px"></span>
       </div>
+      <div class="mode-switch" title="Toggle join mode">
+        <label>
+          <span class="mode-label" id="modeLabel">Individual</span>
+          <input type="checkbox" id="modeToggle" />
+          <span class="mode-label" id="modeLabel2">Together</span>
+        </label>
+      </div>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
     </div>
   </div>
@@ -479,7 +494,6 @@ tr:hover td{background:var(--hover-bg)}
 
     <!-- LEFT COLUMN -->
     <div>
-      <!-- START BOTS CARD -->
       <div class="card">
         <div class="card-title">📌 Start New Meeting</div>
         <div class="form-grid">
@@ -523,7 +537,6 @@ tr:hover td{background:var(--hover-bg)}
         <div id="msg" class="log">✅ Ready</div>
       </div>
 
-      <!-- ACTIVE MEETINGS CARD -->
       <div class="card">
         <div class="card-title" style="display:flex;justify-content:space-between">
           <span>📋 Active Meetings</span>
@@ -537,19 +550,19 @@ tr:hover td{background:var(--hover-bg)}
                 <th>Meeting</th>
                 <th>Bots</th>
                 <th>Type</th>
+                <th>Mode</th>
                 <th>Time Left</th>
                 <th style="text-align:center">Action</th>
               </tr>
             </thead>
             <tbody id="tbody">
-              <tr><td colspan="6" class="empty">No active meetings</td></tr>
+              <tr><td colspan="7" class="empty">No active meetings</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT COLUMN: WORKERS -->
     <div class="workers-panel">
       <div class="panel-title">
         <span>🖥️ Connected Workers</span>
@@ -565,7 +578,6 @@ tr:hover td{background:var(--hover-bg)}
 
   </div>
 </div>
-
 <script>
 // ===== DOM REFS =====
 const API = location.origin;
@@ -587,20 +599,39 @@ const taskCount = $('taskCount');
 const statusText = $('statusText');
 const liveTime = $('liveTime');
 const themeToggle = $('themeToggle');
+const modeToggle = $('modeToggle');
+const modeLabel = $('modeLabel');
+const modeLabel2 = $('modeLabel2');
 
-// ===== THEME MANAGEMENT =====
+// ===== THEME =====
 function getTheme(){ return localStorage.getItem('junaid_theme') || 'dark'; }
 function setTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('junaid_theme', theme);
   themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
 }
+setTheme(getTheme());
 themeToggle.addEventListener('click', ()=>{
   const current = getTheme();
   setTheme(current === 'dark' ? 'light' : 'dark');
 });
-// Apply saved theme
-setTheme(getTheme());
+
+// ===== MODE =====
+function getMode(){ return localStorage.getItem('junaid_mode') || 'individual'; }
+function setMode(mode){
+  localStorage.setItem('junaid_mode', mode);
+  const checked = mode === 'together';
+  modeToggle.checked = checked;
+  modeLabel.style.color = checked ? '' : 'var(--accent-blue)';
+  modeLabel2.style.color = checked ? 'var(--accent-blue)' : '';
+}
+// Apply saved mode
+const savedMode = getMode();
+setMode(savedMode);
+modeToggle.addEventListener('change', ()=>{
+  const mode = modeToggle.checked ? 'together' : 'individual';
+  setMode(mode);
+});
 
 // ===== HELPERS =====
 function show(m, type='info'){
@@ -640,7 +671,6 @@ async function refresh(){
     workerCount.textContent = Object.keys(workers).length;
     taskCount.textContent = Object.keys(tasks).length + ' running';
 
-    // Workers list
     const wKeys = Object.keys(workers);
     if(!wKeys.length){
       wlist.innerHTML = '<div class="empty">No workers connected</div>';
@@ -657,27 +687,29 @@ async function refresh(){
       }).join('');
     }
 
-    // Tasks table
     const tKeys = Object.keys(tasks);
     if(!tKeys.length){
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">No active meetings</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No active meetings</td></tr>';
     } else {
       tbody.innerHTML = tKeys.map(tid => {
         const t = tasks[tid];
         const meeting = t.meeting_code || 'N/A';
         const bots = t.bot_count || 0;
         const type = t.name_type || 'indian';
+        const mode = t.join_mode || 'individual';
         const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
         const totalDur = t.duration_minutes || 120;
         const pct = totalDur > 0 ? ((totalDur - Math.max(0, remaining)) / totalDur * 100) : 0;
         const pctClamped = Math.min(100, Math.max(0, pct));
         const warn = remaining < 5 ? 'danger' : remaining < 15 ? 'warning' : '';
         const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
+        const modeIcon = mode === 'together' ? '👥' : '🚶';
         return `<tr>
           <td style="font-family:monospace;font-size:12px;color:var(--text-secondary)">${tid}</td>
           <td class="meeting-code">${meeting}</td>
           <td>${bots}</td>
           <td><span class="badge badge-${typeBadge}">${type}</span></td>
+          <td>${modeIcon}</td>
           <td>
             <div class="timer-bar">
               <div class="progress">
@@ -708,6 +740,7 @@ async function startBots(){
   const bots = parseInt(botCount.value) || 10;
   const dur = parseInt(duration.value) || 120;
   const type = nameType.value;
+  const mode = getMode();  // read current mode
   let custom = null;
   if(type === 'custom'){
     custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
@@ -720,7 +753,8 @@ async function startBots(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         meeting_code: meeting, passcode: pass, bot_count: bots,
-        duration_minutes: dur, name_type: type, custom_names: custom
+        duration_minutes: dur, name_type: type, custom_names: custom,
+        join_mode: mode
       })
     });
     const d = await r.json();
@@ -733,7 +767,7 @@ async function startBots(){
   } catch(e){ show(e.message, 'err'); }
 }
 
-// ===== KILL TASK (by task_id) =====
+// ===== KILL TASK =====
 async function killTask(taskId){
   if(!confirm(`Kill task ${taskId}?`)) return;
   try{
@@ -751,7 +785,6 @@ async function killTask(taskId){
   } catch(e){ show(e.message, 'err'); }
 }
 
-// ===== AUTO REFRESH =====
 setInterval(refresh, 5000);
 refresh();
 </script>
