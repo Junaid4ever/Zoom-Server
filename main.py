@@ -1,5 +1,6 @@
 # ============================================
-# ZOOM BOT CENTRAL - Railway (UPDATED HTML)
+# ============================================
+# ZOOM BOT CENTRAL - Railway (FULL + RECONNECT FIX)
 # ============================================
 import os
 import uuid
@@ -53,24 +54,46 @@ async def connect(sid, environ):
 
 @sio.event
 async def disconnect(sid):
+    # Remove worker only if it has no running tasks
     for wid, info in list(workers.items()):
         if info.get("sid") == sid:
-            del workers[wid]
-            print(f"[SIO] Worker removed: {wid}")
+            # Check if this worker has any running tasks
+            has_tasks = any(t.get("worker_id") == wid for t in running_tasks.values())
+            if not has_tasks:
+                del workers[wid]
+                print(f"[SIO] Worker removed: {wid} (no tasks)")
+            else:
+                # Keep worker but mark as offline (sid = None)
+                workers[wid]["sid"] = None
+                workers[wid]["last_seen"] = datetime.now().isoformat()
+                print(f"[SIO] Worker {wid} went offline but has running tasks, kept state.")
             break
 
 @sio.event
 async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
-    workers[wid] = {
-        "sid": sid,
-        "max_capacity": max_cap,
-        "free_capacity": max_cap,
-        "last_seen": datetime.now().isoformat()
-    }
+    now = datetime.now().isoformat()
+
+    if wid in workers:
+        # Worker reconnecting – keep existing free_capacity
+        workers[wid]["sid"] = sid
+        workers[wid]["last_seen"] = now
+        # Ensure max_capacity is correct (could have changed)
+        workers[wid]["max_capacity"] = max_cap
+        # free_capacity remains unchanged
+        print(f"[SIO] Worker {wid} reconnected, free_capacity unchanged: {workers[wid]['free_capacity']}")
+    else:
+        # New worker
+        workers[wid] = {
+            "sid": sid,
+            "max_capacity": max_cap,
+            "free_capacity": max_cap,
+            "last_seen": now
+        }
+        print(f"[SIO] Registered new worker {wid} | capacity={max_cap}")
+
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
-    print(f"[SIO] Registered {wid} | capacity={max_cap}")
 
 @sio.event
 async def update_capacity(sid, data):
@@ -85,6 +108,7 @@ async def task_completed(sid, data):
     if tid and tid in running_tasks:
         wid = running_tasks[tid].get("worker_id")
         if wid and wid in workers:
+            # Restore capacity
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
                 workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
@@ -150,7 +174,13 @@ async def start_bots(req: StartBotRequest):
             "custom_names": req.custom_names,
             "join_mode": req.join_mode or "individual"
         }
-        await sio.emit("new_task", payload, to=info["sid"])
+        # Only send if worker is connected (sid not None)
+        if info.get("sid"):
+            await sio.emit("new_task", payload, to=info["sid"])
+        else:
+            # Worker offline – we cannot assign task, skip
+            print(f"⚠️ Worker {wid} is offline, cannot assign task.")
+            continue
         running_tasks[task_id] = {
             "task_id": task_id,
             "meeting_code": meeting,
@@ -185,8 +215,11 @@ async def terminate(req: Optional[TerminateRequest] = None):
         if task_id not in running_tasks:
             raise HTTPException(404, "Task not found")
         meeting = running_tasks[task_id].get("meeting_code")
-        await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting})
         wid = running_tasks[task_id].get("worker_id")
+        # Send terminate to worker if connected
+        if wid in workers and workers[wid].get("sid"):
+            await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
+        # Restore capacity
         if wid and wid in workers:
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
@@ -198,23 +231,29 @@ async def terminate(req: Optional[TerminateRequest] = None):
 
     elif req and req.meeting_code:
         meeting = req.meeting_code
-        await sio.emit("terminate", {"meeting_code": meeting})
-        for tid in list(running_tasks.keys()):
-            if running_tasks[tid].get("meeting_code") == meeting:
-                wid = running_tasks[tid].get("worker_id")
-                if wid and wid in workers:
-                    workers[wid]["free_capacity"] = min(
-                        workers[wid]["max_capacity"],
-                        workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
-                    )
-                del running_tasks[tid]
+        # Find all tasks with this meeting code
+        to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
+        for tid in to_kill:
+            wid = running_tasks[tid].get("worker_id")
+            if wid in workers and workers[wid].get("sid"):
+                await sio.emit("terminate", {"task_id": tid, "meeting_code": meeting}, to=workers[wid]["sid"])
+            # Restore capacity
+            if wid and wid in workers:
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
+            del running_tasks[tid]
         print(f"[API] Terminate meeting {meeting}")
         return {"success": True, "message": f"Meeting {meeting} terminated"}
 
     else:
-        await sio.emit("terminate", {"meeting_code": None})
+        # Kill ALL
         for tid in list(running_tasks.keys()):
             wid = running_tasks[tid].get("worker_id")
+            if wid in workers and workers[wid].get("sid"):
+                await sio.emit("terminate", {"task_id": tid, "meeting_code": None}, to=workers[wid]["sid"])
+            # Restore capacity
             if wid and wid in workers:
                 workers[wid]["free_capacity"] = min(
                     workers[wid]["max_capacity"],
