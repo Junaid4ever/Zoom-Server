@@ -41,13 +41,12 @@ class StartBotRequest(BaseModel):
     duration_minutes: int = 120
     name_type: str = "indian"
     custom_names: Optional[List[str]] = None
-    join_mode: str = "individual"   # "together" or "individual"
+    join_mode: str = "individual"
 
 class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
-# ----- SOCKET.IO EVENTS (unchanged) -----
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}")
@@ -93,7 +92,6 @@ async def task_completed(sid, data):
         del running_tasks[tid]
         print(f"[SIO] Task completed: {tid}")
 
-# ----- API -----
 @app.get("/health")
 async def health():
     return {"ok": True, "workers": len(workers)}
@@ -150,7 +148,7 @@ async def start_bots(req: StartBotRequest):
             "duration_minutes": req.duration_minutes,
             "name_type": req.name_type or "indian",
             "custom_names": req.custom_names,
-            "join_mode": req.join_mode or "individual"   # <-- NEW
+            "join_mode": req.join_mode or "individual"
         }
         await sio.emit("new_task", payload, to=info["sid"])
         running_tasks[task_id] = {
@@ -162,7 +160,7 @@ async def start_bots(req: StartBotRequest):
             "duration_minutes": req.duration_minutes,
             "started_at": datetime.now().isoformat(),
             "remaining_minutes": req.duration_minutes,
-            "join_mode": req.join_mode or "individual"   # store for display
+            "join_mode": req.join_mode or "individual"
         }
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
@@ -227,359 +225,307 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# DASHBOARD HTML (WITH MODE TOGGLE)
+# REDESIGNED DASHBOARD (Clean, Modern, Responsive)
 # ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
-<title>Junaid Members Panel (Zoom)</title>
-<style>
-/* ----- CSS VARIABLES (same as before) ----- */
-:root {
-  --bg-body: #0a0e17;
-  --bg-card: #0d1117;
-  --bg-input: #0d1117;
-  --border-color: #21262d;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --accent-blue: #58a6ff;
-  --accent-green: #3fb950;
-  --accent-red: #f85149;
-  --accent-yellow: #d29922;
-  --shadow: 0 4px 12px rgba(0,0,0,0.4);
-  --header-bg: linear-gradient(135deg, #0d1b2a, #1b2d45);
-  --header-border: #1e3a5f;
-  --badge-indian: #1a3a2a;
-  --badge-english: #1a2a4a;
-  --badge-custom: #3a2a1a;
-  --scrollbar-thumb: #30363d;
-  --hover-bg: #161b22;
-}
-[data-theme="light"] {
-  --bg-body: #f0f6fc;
-  --bg-card: #ffffff;
-  --bg-input: #ffffff;
-  --border-color: #d0d7de;
-  --text-primary: #1f2328;
-  --text-secondary: #656d76;
-  --text-muted: #8b949e;
-  --accent-blue: #0969da;
-  --accent-green: #1a7f37;
-  --accent-red: #cf222e;
-  --accent-yellow: #9a6700;
-  --shadow: 0 4px 12px rgba(0,0,0,0.08);
-  --header-bg: linear-gradient(135deg, #e1ecf4, #d0dbe8);
-  --header-border: #b0c4de;
-  --badge-indian: #daf0d5;
-  --badge-english: #d5e4f0;
-  --badge-custom: #f0e4d5;
-  --scrollbar-thumb: #c0c8d0;
-  --hover-bg: #f6f8fa;
-}
-/* ----- RESET (same) ----- */
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: var(--bg-body);
-  color: var(--text-primary);
-  min-height: 100vh;
-  padding: 16px;
-  transition: background 0.3s, color 0.3s;
-}
-.container{max-width:1400px;margin:0 auto}
-.header{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:12px 20px;
-  background: var(--header-bg);
-  border-radius:16px;
-  border:1px solid var(--header-border);
-  margin-bottom:20px;
-  flex-wrap:wrap;gap:10px;
-  transition: background 0.3s, border-color 0.3s;
-}
-.header h1{
-  font-size:22px;font-weight:700;
-  background:linear-gradient(90deg, var(--accent-blue), #79c0ff);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  letter-spacing:0.3px;
-}
-.header h1 span{font-weight:300;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary)}
-.header-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.status-badge{
-  display:flex;align-items:center;gap:6px;
-  background:var(--bg-card);padding:4px 14px;border-radius:20px;
-  border:1px solid var(--border-color);font-size:13px;
-}
-.status-badge .dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--accent-green);animation:pulse 2s infinite;
-}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-.theme-toggle{
-  background:var(--bg-card);border:1px solid var(--border-color);
-  border-radius:30px;padding:4px 12px;cursor:pointer;
-  font-size:20px;line-height:1;transition:all 0.2s;
-  color:var(--text-primary);
-}
-.theme-toggle:hover{transform:scale(1.05);border-color:var(--accent-blue)}
-.main-grid{
-  display:grid;grid-template-columns:1fr 300px;gap:16px;
-}
-@media(max-width:860px){.main-grid{grid-template-columns:1fr}}
-.card{
-  background:var(--bg-card);border:1px solid var(--border-color);
-  border-radius:12px;padding:16px;margin-bottom:16px;
-  transition: background 0.3s, border-color 0.3s;
-}
-.card-title{
-  font-size:13px;font-weight:600;color:var(--text-secondary);
-  text-transform:uppercase;letter-spacing:0.4px;margin-bottom:12px;
-}
-.form-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px;
-}
-@media(max-width:500px){.form-grid{grid-template-columns:1fr}}
-.form-group{display:flex;flex-direction:column;gap:3px}
-.form-group label{font-size:12px;color:var(--text-secondary);font-weight:500}
-.form-group input,.form-group select,.form-group textarea{
-  padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-color);
-  border-radius:8px;color:var(--text-primary);font-size:14px;
-  transition:border-color 0.2s, background 0.3s, color 0.3s;
-}
-.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
-  outline:none;border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(88,166,255,0.15);
-}
-.form-group textarea{resize:vertical;font-family:monospace;font-size:13px}
-#customBox{
-  display:none;margin-top:10px;padding:12px;
-  background:var(--bg-body);border:1px solid var(--border-color);border-radius:8px;
-}
-#customBox .name-status{font-size:12px;color:var(--text-secondary);margin-top:6px}
-#customBox .name-status .ok{color:var(--accent-green)}
-#customBox .name-status .err{color:var(--accent-red)}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-.btn{
-  padding:8px 18px;border:none;border-radius:8px;
-  font-weight:600;font-size:14px;cursor:pointer;
-  transition:all 0.2s;display:inline-flex;align-items:center;gap:5px;
-}
-.btn-primary{background:var(--accent-green);color:#fff}
-.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
-.btn-danger{background:var(--accent-red);color:#fff}
-.btn-danger:hover{filter:brightness(1.1);transform:translateY(-1px)}
-.btn-outline{background:transparent;color:var(--text-secondary);border:1px solid var(--border-color)}
-.btn-outline:hover{background:var(--hover-bg);color:var(--text-primary)}
-.btn-sm{padding:3px 10px;font-size:12px}
-.log{
-  margin-top:12px;padding:8px 12px;background:var(--bg-body);
-  border:1px solid var(--border-color);border-radius:8px;
-  font-family:monospace;font-size:13px;min-height:36px;
-  color:var(--text-secondary);
-}
-.log .ok{color:var(--accent-green)}
-.log .err{color:var(--accent-red)}
-.log .info{color:var(--accent-blue)}
-.workers-panel{
-  background:var(--bg-card);border:1px solid var(--border-color);
-  border-radius:12px;padding:16px;height:fit-content;
-  position:sticky;top:16px;
-}
-.workers-panel .panel-title{
-  font-size:13px;font-weight:600;color:var(--text-secondary);
-  text-transform:uppercase;letter-spacing:0.4px;
-  margin-bottom:10px;display:flex;justify-content:space-between;
-}
-.workers-panel .panel-title span{color:var(--accent-blue)}
-.workers-scroll{
-  max-height:400px;overflow-y:auto;padding-right:4px;
-}
-.workers-scroll::-webkit-scrollbar{width:4px}
-.workers-scroll::-webkit-scrollbar-track{background:var(--bg-body)}
-.workers-scroll::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:4px}
-.worker-item{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:8px 10px;background:var(--bg-body);border:1px solid var(--border-color);
-  border-radius:6px;margin-bottom:5px;font-size:13px;font-family:monospace;
-}
-.worker-item .name{color:var(--accent-blue)}
-.worker-item .cap{color:var(--text-secondary)}
-.worker-item .cap .free{color:var(--accent-green)}
-.worker-item .online{color:var(--accent-green);font-size:10px}
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border-color)}
-th{color:var(--text-secondary);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.3px}
-tr:hover td{background:var(--hover-bg)}
-.meeting-code{font-weight:600;color:var(--accent-blue);font-family:monospace}
-.badge{
-  display:inline-block;padding:1px 10px;border-radius:12px;
-  font-size:11px;font-weight:500;
-}
-.badge-indian{background:var(--badge-indian);color:var(--accent-green)}
-.badge-english{background:var(--badge-english);color:var(--accent-blue)}
-.badge-custom{background:var(--badge-custom);color:var(--accent-yellow)}
-.timer-bar{
-  display:flex;align-items:center;gap:8px;
-}
-.timer-bar .progress{
-  flex:1;height:3px;background:var(--border-color);border-radius:4px;overflow:hidden;
-}
-.timer-bar .progress .fill{
-  height:100%;border-radius:4px;transition:width 1s linear;
-}
-.timer-bar .time-text{
-  font-family:monospace;font-size:12px;min-width:40px;text-align:right;
-  color:var(--text-secondary);
-}
-.timer-bar .time-text.warning{color:var(--accent-yellow)}
-.timer-bar .time-text.danger{color:var(--accent-red)}
-.empty{text-align:center;color:var(--text-secondary);padding:20px 0;font-size:13px}
-.footer-meta{margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);font-size:12px;color:var(--text-secondary)}
-/* ----- MODE TOGGLE (switch) ----- */
-.mode-switch{
-  display:flex;align-items:center;gap:8px;
-  padding:4px 12px;background:var(--bg-card);border:1px solid var(--border-color);
-  border-radius:30px;font-size:12px;color:var(--text-secondary);
-}
-.mode-switch label{
-  display:flex;align-items:center;gap:4px;cursor:pointer;
-  transition:color 0.2s;
-}
-.mode-switch input[type="checkbox"]{
-  appearance:none;width:34px;height:18px;background:var(--border-color);
-  border-radius:20px;position:relative;cursor:pointer;transition:background 0.3s;
-  flex-shrink:0;
-}
-.mode-switch input[type="checkbox"]::after{
-  content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;
-  background:var(--bg-card);border-radius:50%;transition:transform 0.3s;
-}
-.mode-switch input[type="checkbox"]:checked{
-  background:var(--accent-blue);
-}
-.mode-switch input[type="checkbox"]:checked::after{
-  transform:translateX(16px);
-}
-.mode-switch .mode-label{font-weight:500;white-space:nowrap}
-.mode-switch .mode-label.active{color:var(--accent-blue)}
-</style>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
+    <title>Junaid Members Panel (Zoom)</title>
+    <style>
+        :root {
+            --bg-body: #0a0e17;
+            --bg-card: #0d1117;
+            --bg-input: #0d1117;
+            --border-color: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --shadow: 0 4px 12px rgba(0,0,0,0.4);
+            --header-bg: linear-gradient(135deg, #0d1b2a, #1b2d45);
+            --header-border: #1e3a5f;
+            --badge-indian: #1a3a2a;
+            --badge-english: #1a2a4a;
+            --badge-custom: #3a2a1a;
+            --scrollbar-thumb: #30363d;
+            --hover-bg: #161b22;
+        }
+        [data-theme="light"] {
+            --bg-body: #f0f6fc;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --border-color: #d0d7de;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8b949e;
+            --accent-blue: #0969da;
+            --accent-green: #1a7f37;
+            --accent-red: #cf222e;
+            --accent-yellow: #9a6700;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+            --header-bg: linear-gradient(135deg, #e1ecf4, #d0dbe8);
+            --header-border: #b0c4de;
+            --badge-indian: #daf0d5;
+            --badge-english: #d5e4f0;
+            --badge-custom: #f0e4d5;
+            --scrollbar-thumb: #c0c8d0;
+            --hover-bg: #f6f8fa;
+        }
+        * { margin:0; padding:0; box-sizing:border-box }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-body);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 16px;
+            transition: background 0.3s, color 0.3s;
+        }
+        .container { max-width:1400px; margin:0 auto }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 20px;
+            background: var(--header-bg);
+            border-radius: 16px;
+            border: 1px solid var(--header-border);
+            margin-bottom: 20px;
+            flex-wrap: wrap; gap: 10px;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .header h1 {
+            font-size: 22px; font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-blue), #79c0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 0.3px;
+        }
+        .header h1 span { font-weight:300; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary) }
+        .header-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+        .status-badge {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--bg-card); padding: 4px 14px; border-radius: 20px;
+            border: 1px solid var(--border-color); font-size: 13px;
+        }
+        .status-badge .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent-green); animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .theme-toggle {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 30px; padding: 4px 12px; cursor: pointer;
+            font-size: 20px; line-height: 1; transition: all 0.2s;
+            color: var(--text-primary);
+        }
+        .theme-toggle:hover { transform: scale(1.05); border-color: var(--accent-blue) }
+        .main-grid { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+        @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr } }
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 16px; margin-bottom: 16px;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .card-title {
+            font-size: 13px; font-weight: 600; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px;
+        }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr } }
+        .form-group { display: flex; flex-direction: column; gap: 3px }
+        .form-group label { font-size: 12px; color: var(--text-secondary); font-weight: 500 }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border-color);
+            border-radius: 8px; color: var(--text-primary); font-size: 14px;
+            transition: border-color 0.2s, background 0.3s, color 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(88,166,255,0.15);
+        }
+        .form-group textarea { resize: vertical; font-family: monospace; font-size: 13px }
+        #customBox {
+            display: none; margin-top: 10px; padding: 12px;
+            background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px;
+        }
+        #customBox .name-status { font-size: 12px; color: var(--text-secondary); margin-top: 6px }
+        #customBox .name-status .ok { color: var(--accent-green) }
+        #customBox .name-status .err { color: var(--accent-red) }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px }
+        .btn {
+            padding: 8px 18px; border: none; border-radius: 8px;
+            font-weight: 600; font-size: 14px; cursor: pointer;
+            transition: all 0.2s; display: inline-flex; align-items: center; gap: 5px;
+        }
+        .btn-primary { background: var(--accent-green); color: #fff }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px) }
+        .btn-danger { background: var(--accent-red); color: #fff }
+        .btn-danger:hover { filter: brightness(1.1); transform: translateY(-1px) }
+        .btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color) }
+        .btn-outline:hover { background: var(--hover-bg); color: var(--text-primary) }
+        .btn-sm { padding: 3px 10px; font-size: 12px }
+        .log {
+            margin-top: 12px; padding: 8px 12px; background: var(--bg-body);
+            border: 1px solid var(--border-color); border-radius: 8px;
+            font-family: monospace; font-size: 13px; min-height: 36px;
+            color: var(--text-secondary);
+        }
+        .log .ok { color: var(--accent-green) }
+        .log .err { color: var(--accent-red) }
+        .log .info { color: var(--accent-blue) }
+        .workers-panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 16px; height: fit-content;
+            position: sticky; top: 16px;
+        }
+        .workers-panel .panel-title {
+            font-size: 13px; font-weight: 600; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.4px;
+            margin-bottom: 10px; display: flex; justify-content: space-between;
+        }
+        .workers-panel .panel-title span { color: var(--accent-blue) }
+        .workers-scroll {
+            max-height: 400px; overflow-y: auto; padding-right: 4px;
+        }
+        .workers-scroll::-webkit-scrollbar { width: 4px }
+        .workers-scroll::-webkit-scrollbar-track { background: var(--bg-body) }
+        .workers-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px }
+        .worker-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 10px; background: var(--bg-body); border: 1px solid var(--border-color);
+            border-radius: 6px; margin-bottom: 5px; font-size: 13px; font-family: monospace;
+        }
+        .worker-item .name { color: var(--accent-blue) }
+        .worker-item .cap { color: var(--text-secondary) }
+        .worker-item .cap .free { color: var(--accent-green) }
+        .worker-item .online { color: var(--accent-green); font-size: 10px }
+        .table-wrap { overflow-x: auto }
+        table { width: 100%; border-collapse: collapse; font-size: 14px }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color) }
+        th { color: var(--text-secondary); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px }
+        tr:hover td { background: var(--hover-bg) }
+        .meeting-code { font-weight: 600; color: var(--accent-blue); font-family: monospace }
+        .badge {
+            display: inline-block; padding: 1px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 500;
+        }
+        .badge-indian { background: var(--badge-indian); color: var(--accent-green) }
+        .badge-english { background: var(--badge-english); color: var(--accent-blue) }
+        .badge-custom { background: var(--badge-custom); color: var(--accent-yellow) }
+        .timer-bar {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .timer-bar .progress {
+            flex: 1; height: 3px; background: var(--border-color); border-radius: 4px; overflow: hidden;
+        }
+        .timer-bar .progress .fill {
+            height: 100%; border-radius: 4px; transition: width 1s linear;
+        }
+        .timer-bar .time-text {
+            font-family: monospace; font-size: 12px; min-width: 40px; text-align: right;
+            color: var(--text-secondary);
+        }
+        .timer-bar .time-text.warning { color: var(--accent-yellow) }
+        .timer-bar .time-text.danger { color: var(--accent-red) }
+        .empty { text-align: center; color: var(--text-secondary); padding: 20px 0; font-size: 13px }
+        .footer-meta { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary) }
+        .mode-switch {
+            display: flex; align-items: center; gap: 8px;
+            padding: 4px 12px; background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 30px; font-size: 12px; color: var(--text-secondary);
+        }
+        .mode-switch label {
+            display: flex; align-items: center; gap: 4px; cursor: pointer;
+            transition: color 0.2s;
+        }
+        .mode-switch input[type="checkbox"] {
+            appearance: none; width: 34px; height: 18px; background: var(--border-color);
+            border-radius: 20px; position: relative; cursor: pointer; transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .mode-switch input[type="checkbox"]::after {
+            content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+            background: var(--bg-card); border-radius: 50%; transition: transform 0.3s;
+        }
+        .mode-switch input[type="checkbox"]:checked { background: var(--accent-blue) }
+        .mode-switch input[type="checkbox"]:checked::after { transform: translateX(16px) }
+        .mode-switch .mode-label { font-weight: 500; white-space: nowrap }
+        .mode-switch .mode-label.active { color: var(--accent-blue) }
+    </style>
 </head>
 <body>
 <div class="container">
-
-  <div class="header">
-    <h1>🚀 Junaid <span>Members Panel (Zoom)</span></h1>
-    <div class="header-actions">
-      <div class="status-badge">
-        <span class="dot"></span>
-        <span id="statusText">Connected</span>
-        <span style="color:var(--text-muted);margin-left:4px">|</span>
-        <span id="liveTime" style="font-family:monospace;font-size:12px"></span>
-      </div>
-      <div class="mode-switch" title="Toggle join mode">
-        <label>
-          <span class="mode-label" id="modeLabel">Individual</span>
-          <input type="checkbox" id="modeToggle" />
-          <span class="mode-label" id="modeLabel2">Together</span>
-        </label>
-      </div>
-      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+    <div class="header">
+        <h1>🚀 Junaid <span>Members Panel (Zoom)</span></h1>
+        <div class="header-actions">
+            <div class="status-badge">
+                <span class="dot"></span>
+                <span id="statusText">Connected</span>
+                <span style="color:var(--text-muted);margin-left:4px">|</span>
+                <span id="liveTime" style="font-family:monospace;font-size:12px"></span>
+            </div>
+            <div class="mode-switch" title="Toggle join mode">
+                <label>
+                    <span class="mode-label" id="modeLabel">Individual</span>
+                    <input type="checkbox" id="modeToggle" />
+                    <span class="mode-label" id="modeLabel2">Together</span>
+                </label>
+            </div>
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+        </div>
     </div>
-  </div>
-
-  <div class="main-grid">
-
-    <!-- LEFT COLUMN -->
-    <div>
-      <div class="card">
-        <div class="card-title">📌 Start New Meeting</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Meeting ID</label>
-            <input id="meetingId" placeholder="5415403058"/>
-          </div>
-          <div class="form-group">
-            <label>Passcode</label>
-            <input id="passcode" placeholder="optional"/>
-          </div>
-          <div class="form-group">
-            <label>Bots</label>
-            <input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/>
-          </div>
-          <div class="form-group">
-            <label>Duration (min)</label>
-            <input type="number" id="duration" value="120" min="1"/>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>Name Type</label>
-            <select id="nameType" onchange="toggleCustom()">
-              <option value="indian">🇮🇳 Indian (Natural)</option>
-              <option value="english">🇺🇸 English</option>
-              <option value="custom">✏️ Custom Names</option>
-            </select>
-          </div>
+    <div class="main-grid">
+        <div>
+            <div class="card">
+                <div class="card-title">📌 Start New Meeting</div>
+                <div class="form-grid">
+                    <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="5415403058"/></div>
+                    <div class="form-group"><label>Passcode</label><input id="passcode" placeholder="optional"/></div>
+                    <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/></div>
+                    <div class="form-group"><label>Duration (min)</label><input type="number" id="duration" value="120" min="1"/></div>
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label>Name Type</label>
+                        <select id="nameType" onchange="toggleCustom()">
+                            <option value="indian">🇮🇳 Indian (Natural)</option>
+                            <option value="english">🇺🇸 English</option>
+                            <option value="custom">✏️ Custom Names</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="customBox">
+                    <label style="font-size:12px;color:var(--text-secondary)">Custom names (one per line)</label>
+                    <textarea id="customNames" rows="4" placeholder="Rahul Sharma&#10;Arjun Singh&#10;Priya Patel"></textarea>
+                    <div class="name-status">Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong> <span id="nameStatus"></span></div>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="startBots()">🚀 Start Bots</button>
+                    <button class="btn btn-outline" onclick="refresh()">🔄 Refresh</button>
+                </div>
+                <div id="msg" class="log">✅ Ready</div>
+            </div>
+            <div class="card">
+                <div class="card-title" style="display:flex;justify-content:space-between">
+                    <span>📋 Active Meetings</span>
+                    <span id="taskCount" style="color:var(--text-secondary);font-weight:400;text-transform:none">0 running</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Task</th><th>Meeting</th><th>Bots</th><th>Type</th><th>Mode</th><th>Time Left</th><th style="text-align:center">Action</th></tr></thead>
+                        <tbody id="tbody"><tr><td colspan="7" class="empty">No active meetings</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div id="customBox">
-          <label style="font-size:12px;color:var(--text-secondary)">Custom names (one per line)</label>
-          <textarea id="customNames" rows="4" placeholder="Rahul Sharma&#10;Arjun Singh&#10;Priya Patel"></textarea>
-          <div class="name-status">
-            Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong>
-            <span id="nameStatus"></span>
-          </div>
+        <div class="workers-panel">
+            <div class="panel-title"><span>🖥️ Connected Workers</span><span id="workerCount">0</span></div>
+            <div class="workers-scroll" id="wlist"><div class="empty" style="padding:20px 0">No workers connected</div></div>
+            <div class="footer-meta">Total: <strong id="totalCap">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCap">0</strong></div>
         </div>
-        <div class="actions">
-          <button class="btn btn-primary" onclick="startBots()">🚀 Start Bots</button>
-          <button class="btn btn-outline" onclick="refresh()">🔄 Refresh</button>
-        </div>
-        <div id="msg" class="log">✅ Ready</div>
-      </div>
-
-      <div class="card">
-        <div class="card-title" style="display:flex;justify-content:space-between">
-          <span>📋 Active Meetings</span>
-          <span id="taskCount" style="color:var(--text-secondary);font-weight:400;text-transform:none">0 running</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>Meeting</th>
-                <th>Bots</th>
-                <th>Type</th>
-                <th>Mode</th>
-                <th>Time Left</th>
-                <th style="text-align:center">Action</th>
-              </tr>
-            </thead>
-            <tbody id="tbody">
-              <tr><td colspan="7" class="empty">No active meetings</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
-
-    <div class="workers-panel">
-      <div class="panel-title">
-        <span>🖥️ Connected Workers</span>
-        <span id="workerCount">0</span>
-      </div>
-      <div class="workers-scroll" id="wlist">
-        <div class="empty" style="padding:20px 0">No workers connected</div>
-      </div>
-      <div class="footer-meta">
-        Total: <strong id="totalCap">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCap">0</strong>
-      </div>
-    </div>
-
-  </div>
 </div>
 <script>
-// ===== DOM REFS =====
 const API = location.origin;
 const $ = id => document.getElementById(id);
 const meetingId = $('meetingId');
@@ -603,7 +549,6 @@ const modeToggle = $('modeToggle');
 const modeLabel = $('modeLabel');
 const modeLabel2 = $('modeLabel2');
 
-// ===== THEME =====
 function getTheme(){ return localStorage.getItem('junaid_theme') || 'dark'; }
 function setTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
@@ -616,7 +561,6 @@ themeToggle.addEventListener('click', ()=>{
   setTheme(current === 'dark' ? 'light' : 'dark');
 });
 
-// ===== MODE =====
 function getMode(){ return localStorage.getItem('junaid_mode') || 'individual'; }
 function setMode(mode){
   localStorage.setItem('junaid_mode', mode);
@@ -625,7 +569,6 @@ function setMode(mode){
   modeLabel.style.color = checked ? '' : 'var(--accent-blue)';
   modeLabel2.style.color = checked ? 'var(--accent-blue)' : '';
 }
-// Apply saved mode
 const savedMode = getMode();
 setMode(savedMode);
 modeToggle.addEventListener('change', ()=>{
@@ -633,7 +576,6 @@ modeToggle.addEventListener('change', ()=>{
   setMode(mode);
 });
 
-// ===== HELPERS =====
 function show(m, type='info'){
   const cls = type==='ok'?'ok':type==='err'?'err':'info';
   msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
@@ -653,7 +595,6 @@ function updCount(){
 }
 customNames.addEventListener('input', updCount);
 
-// ===== REFRESH =====
 async function refresh(){
   try{
     const r = await fetch(API+'/status');
@@ -733,14 +674,13 @@ async function refresh(){
   }
 }
 
-// ===== START BOTS =====
 async function startBots(){
   const meeting = meetingId.value.trim().replace(/\s/g,'');
   const pass = passcode.value.trim();
   const bots = parseInt(botCount.value) || 10;
   const dur = parseInt(duration.value) || 120;
   const type = nameType.value;
-  const mode = getMode();  // read current mode
+  const mode = getMode();
   let custom = null;
   if(type === 'custom'){
     custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
@@ -767,7 +707,6 @@ async function startBots(){
   } catch(e){ show(e.message, 'err'); }
 }
 
-// ===== KILL TASK =====
 async function killTask(taskId){
   if(!confirm(`Kill task ${taskId}?`)) return;
   try{
