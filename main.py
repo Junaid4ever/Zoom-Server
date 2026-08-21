@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – OLD‑SCHOOL PANEL STYLE
+# ZOOM BOT CENTRAL – RECONNECT SUPPORT
 # ============================================
 import os
 import uuid
@@ -53,23 +53,13 @@ async def connect(sid, environ):
 
 @sio.event
 async def disconnect(sid):
-    wid_to_remove = None
-    for wid, info in workers.items():
+    # Mark worker offline but keep tasks and capacity
+    for wid, info in list(workers.items()):
         if info.get("sid") == sid:
-            wid_to_remove = wid
+            workers[wid]["sid"] = None
+            workers[wid]["last_seen"] = datetime.now().isoformat()
+            print(f"[SIO] Worker {wid} went offline (tasks preserved)")
             break
-    if wid_to_remove:
-        for tid in list(running_tasks.keys()):
-            if running_tasks[tid].get("worker_id") == wid_to_remove:
-                wid = running_tasks[tid].get("worker_id")
-                if wid and wid in workers:
-                    workers[wid]["free_capacity"] = min(
-                        workers[wid]["max_capacity"],
-                        workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
-                    )
-                del running_tasks[tid]
-        del workers[wid_to_remove]
-        print(f"[SIO] Worker {wid_to_remove} disconnected and all tasks removed.")
     else:
         print(f"[SIO] Disconnect from unknown sid: {sid}")
 
@@ -77,14 +67,24 @@ async def disconnect(sid):
 async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
-    workers[wid] = {
-        "sid": sid,
-        "max_capacity": max_cap,
-        "free_capacity": max_cap,
-        "last_seen": datetime.now().isoformat()
-    }
+    now = datetime.now().isoformat()
+
+    if wid in workers:
+        # Reconnect – update sid, keep free_capacity and tasks
+        workers[wid]["sid"] = sid
+        workers[wid]["max_capacity"] = max_cap  # in case changed
+        workers[wid]["last_seen"] = now
+        print(f"[SIO] Worker {wid} reconnected, free_capacity unchanged: {workers[wid]['free_capacity']}")
+    else:
+        workers[wid] = {
+            "sid": sid,
+            "max_capacity": max_cap,
+            "free_capacity": max_cap,
+            "last_seen": now
+        }
+        print(f"[SIO] New worker {wid} | capacity={max_cap}")
+
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
-    print(f"[SIO] Registered {wid} | capacity={max_cap}")
 
 @sio.event
 async def update_capacity(sid, data):
@@ -150,7 +150,7 @@ async def start_bots(req: StartBotRequest):
         if remaining <= 0:
             break
         free = int(info.get("free_capacity", 0))
-        if free <= 0 or not info.get("sid"):
+        if free <= 0:
             continue
         give = min(free, remaining)
         task_id = str(uuid.uuid4())[:8]
@@ -164,7 +164,13 @@ async def start_bots(req: StartBotRequest):
             "custom_names": req.custom_names,
             "join_mode": req.join_mode or "individual"
         }
-        await sio.emit("new_task", payload, to=info["sid"])
+        # Only send if worker is connected
+        if info.get("sid"):
+            await sio.emit("new_task", payload, to=info["sid"])
+        else:
+            # Worker offline – cannot assign, skip
+            print(f"⚠️ Worker {wid} is offline, cannot assign task.")
+            continue
         running_tasks[task_id] = {
             "task_id": task_id,
             "meeting_code": meeting,
@@ -200,8 +206,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
             raise HTTPException(404, "Task not found")
         meeting = running_tasks[task_id].get("meeting_code")
         wid = running_tasks[task_id].get("worker_id")
+        # Send terminate to worker if connected
         if wid in workers and workers[wid].get("sid"):
             await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
+        # Restore capacity
         if wid and wid in workers:
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
@@ -228,6 +236,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": f"Meeting {meeting} terminated"}
 
     else:
+        # Kill ALL
         for tid in list(running_tasks.keys()):
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
@@ -242,8 +251,9 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# DASHBOARD – OLD‑SCHOOL PANEL (NO SCHEDULE/REACTIONS)
+# DASHBOARD – OLD‑SCHOOL PANEL
 # ============================================
+# (Use the same HTML as before – unchanged)
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -261,7 +271,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     }
     .container { max-width: 1600px; margin:0 auto; }
 
-    /* header */
     .header {
         display: flex;
         justify-content: space-between;
@@ -294,7 +303,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     }
     .header-right .usage strong { color: #ffd966; }
 
-    /* main grid */
     .main-grid {
         display: grid;
         grid-template-columns: 320px 1fr;
@@ -302,7 +310,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     }
     @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
 
-    /* left panel */
     .left-panel {
         background: #142433;
         border-radius: 6px;
@@ -317,9 +324,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         padding-bottom: 6px;
         margin-bottom: 12px;
     }
-    .form-group {
-        margin-bottom: 10px;
-    }
+    .form-group { margin-bottom: 10px; }
     .form-group label {
         display: block;
         font-size: 12px;
@@ -360,25 +365,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         cursor: pointer;
         transition: all 0.2s;
     }
-    .btn-primary {
-        background: #2a6a9a;
-        color: white;
-    }
+    .btn-primary { background: #2a6a9a; color: white; }
     .btn-primary:hover { background: #3a7aaa; }
-    .btn-danger {
-        background: #8a3a3a;
-        color: white;
-    }
+    .btn-danger { background: #8a3a3a; color: white; }
     .btn-danger:hover { background: #aa4a4a; }
-    .btn-outline {
-        background: transparent;
-        border: 1px solid #2a4a6a;
-        color: #8ab4f8;
-    }
+    .btn-outline { background: transparent; border: 1px solid #2a4a6a; color: #8ab4f8; }
     .btn-outline:hover { background: #1a2a3a; }
     .btn-sm { padding: 2px 10px; font-size: 11px; }
 
-    /* right panel - table */
     .right-panel {
         background: #142433;
         border-radius: 6px;
@@ -443,14 +437,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .badge-indian { border-color: #4a8bc2; color: #4a8bc2; }
     .badge-english { border-color: #6a8a6a; color: #6a8a6a; }
     .badge-custom { border-color: #c29a4a; color: #c29a4a; }
-    .status-valid { color: #6aaa6a; }
-    .status-invalid { color: #aa6a6a; }
-
-    .action-btns {
-        display: flex;
-        gap: 4px;
-        flex-wrap: wrap;
-    }
+    .action-btns { display: flex; gap: 4px; flex-wrap: wrap; }
     .action-btns .btn { font-size: 11px; padding: 2px 8px; }
 
     .log {
@@ -468,7 +455,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .log .err { color: #aa6a6a; }
     .log .info { color: #4a8bc2; }
 
-    /* custom names toggle */
     #customBox {
         display: none;
         margin-top: 6px;
@@ -490,7 +476,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 </head>
 <body>
 <div class="container">
-    <!-- header -->
     <div class="header">
         <h1>🔵 ZOOM <span>Panel</span></h1>
         <div class="header-right">
@@ -499,10 +484,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <button class="btn btn-outline btn-sm" onclick="refresh()">⟳</button>
         </div>
     </div>
-
-    <!-- main -->
     <div class="main-grid">
-        <!-- left panel -->
         <div class="left-panel">
             <div class="section-title">Add custom names</div>
             <div class="form-group">
@@ -542,8 +524,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             </div>
             <div id="msg" class="log">Ready</div>
         </div>
-
-        <!-- right panel -->
         <div class="right-panel">
             <div class="table-header">
                 <h2>All Meetings</h2>
@@ -633,7 +613,6 @@ async function refresh(){
                 const totalDur = t.duration_minutes || 120;
                 const timeOut = Math.ceil(remaining) + ' min';
                 const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
-                const status = remaining > 0 ? 'valid' : 'invalid';
                 return `<tr>
                     <td>${idx}</td>
                     <td class="meeting-id" onclick="alert('Meeting: ${meeting}')">${meeting}</td>
@@ -706,7 +685,6 @@ async function killTask(taskId){
 }
 
 async function refillTask(taskId){
-    // Refill logic: just show info for now (you can implement add bots)
     alert('Refill feature: add more bots to existing task (not implemented)');
 }
 
