@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – HACKER STYLE DASHBOARD
+# ZOOM BOT CENTRAL – OLD‑SCHOOL PANEL STYLE
 # ============================================
 import os
 import uuid
@@ -53,17 +53,14 @@ async def connect(sid, environ):
 
 @sio.event
 async def disconnect(sid):
-    # Remove worker and all its tasks immediately
     wid_to_remove = None
     for wid, info in workers.items():
         if info.get("sid") == sid:
             wid_to_remove = wid
             break
     if wid_to_remove:
-        # Remove all tasks of this worker
         for tid in list(running_tasks.keys()):
             if running_tasks[tid].get("worker_id") == wid_to_remove:
-                # Restore capacity
                 wid = running_tasks[tid].get("worker_id")
                 if wid and wid in workers:
                     workers[wid]["free_capacity"] = min(
@@ -205,7 +202,6 @@ async def terminate(req: Optional[TerminateRequest] = None):
         wid = running_tasks[task_id].get("worker_id")
         if wid in workers and workers[wid].get("sid"):
             await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
-        # Restore capacity
         if wid and wid in workers:
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
@@ -232,7 +228,6 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": f"Meeting {meeting} terminated"}
 
     else:
-        # Kill ALL
         for tid in list(running_tasks.keys()):
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
@@ -247,514 +242,341 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# HACKER-STYLE DASHBOARD HTML
+# DASHBOARD – OLD‑SCHOOL PANEL (NO SCHEDULE/REACTIONS)
 # ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
-<title>🔒 Junaid Members Panel</title>
+<title>Zoom Panel</title>
 <style>
-    /* Matrix-style dark theme */
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
-        background: #0a0f0a;
-        font-family: 'Courier New', monospace;
-        color: #00ff41;
+        background: #0f1a2b;
+        font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        color: #e0e8f0;
         padding: 12px;
         min-height: 100vh;
-        background-image: radial-gradient(circle at 20% 50%, rgba(0,255,65,0.03) 0%, transparent 50%);
     }
-    .container { max-width:1400px; margin:0 auto; }
+    .container { max-width: 1600px; margin:0 auto; }
+
+    /* header */
     .header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px 16px;
-        border: 1px solid #00ff41;
+        background: #142433;
         border-radius: 6px;
-        background: rgba(0,255,65,0.05);
-        margin-bottom: 14px;
-        flex-wrap: wrap;
-        gap: 6px;
-        box-shadow: 0 0 20px rgba(0,255,65,0.1);
+        padding: 8px 16px;
+        margin-bottom: 12px;
+        border-bottom: 2px solid #2a4a6a;
     }
     .header h1 {
         font-size: 20px;
-        font-weight: 700;
-        text-shadow: 0 0 10px #00ff41;
-        letter-spacing: 2px;
-    }
-    .header h1 span { color: #00cc33; text-shadow: 0 0 5px #00cc33; }
-    .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-    .status-badge {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        border: 1px solid #00ff41;
-        padding: 2px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        background: rgba(0,255,65,0.05);
-    }
-    .status-badge .dot {
-        width: 6px; height: 6px;
-        border-radius: 50%;
-        background: #00ff41;
-        animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
-    .theme-toggle, .mode-switch {
-        border: 1px solid #00ff41;
-        border-radius: 30px;
-        padding: 2px 10px;
-        cursor: pointer;
-        background: rgba(0,255,65,0.05);
-        color: #00ff41;
-        font-size: 18px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        transition: all 0.3s;
-    }
-    .theme-toggle:hover, .mode-switch:hover { background: rgba(0,255,65,0.15); border-color: #00ff41; }
-    .mode-switch label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        cursor: pointer;
-        font-size: 11px;
-        font-weight: 500;
-    }
-    .mode-switch input[type="checkbox"] {
-        appearance: none;
-        width: 28px; height: 16px;
-        background: #1a2a1a;
-        border-radius: 20px;
-        position: relative;
-        cursor: pointer;
-        transition: background 0.3s;
-        flex-shrink: 0;
-        border: 1px solid #00ff41;
-    }
-    .mode-switch input[type="checkbox"]::after {
-        content: '';
-        position: absolute;
-        top: 2px; left: 2px;
-        width: 10px; height: 10px;
-        background: #00ff41;
-        border-radius: 50%;
-        transition: transform 0.3s;
-    }
-    .mode-switch input[type="checkbox"]:checked { background: #00ff41; }
-    .mode-switch input[type="checkbox"]:checked::after { transform: translateX(12px); background: #0a0f0a; }
-    .mode-label { white-space: nowrap; font-size: 11px; }
-    .mode-label.active { color: #00ff41; text-shadow: 0 0 8px #00ff41; }
-
-    .stats-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-        gap: 6px;
-        margin-bottom: 12px;
-    }
-    .stat-item {
-        border: 1px solid #00ff41;
-        border-radius: 6px;
-        padding: 6px 4px;
-        text-align: center;
-        background: rgba(0,255,65,0.03);
-        box-shadow: 0 0 10px rgba(0,255,65,0.05);
-    }
-    .stat-item .num {
-        font-size: 20px;
-        font-weight: 700;
-        color: #00ff41;
-        line-height: 1.2;
-        text-shadow: 0 0 15px #00ff41;
-    }
-    .stat-item .num.green { color: #00ff41; }
-    .stat-item .num.red { color: #ff3333; }
-    .stat-item .num.yellow { color: #ffaa00; }
-    .stat-item .label {
-        font-size: 9px;
-        color: #66cc88;
-        text-transform: uppercase;
+        font-weight: 600;
+        color: #8ab4f8;
         letter-spacing: 0.5px;
-        margin-top: 2px;
     }
-    .stat-item.highlight { border-color: #00ff41; background: rgba(0,255,65,0.08); }
-    .stat-item.highlight .num { font-size: 24px; }
+    .header h1 span { color: #5c8fc7; }
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 14px;
+    }
+    .header-right .usage {
+        background: #0a1520;
+        padding: 4px 12px;
+        border-radius: 4px;
+        border: 1px solid #2a4a6a;
+        color: #8ab4f8;
+    }
+    .header-right .usage strong { color: #ffd966; }
 
+    /* main grid */
     .main-grid {
         display: grid;
-        grid-template-columns: 1fr 240px;
-        gap: 12px;
+        grid-template-columns: 320px 1fr;
+        gap: 16px;
     }
-    @media (max-width: 820px) { .main-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
 
-    .card {
-        border: 1px solid #00ff41;
+    /* left panel */
+    .left-panel {
+        background: #142433;
         border-radius: 6px;
-        padding: 12px;
-        margin-bottom: 12px;
-        background: rgba(0,255,65,0.02);
-        box-shadow: 0 0 15px rgba(0,255,65,0.05);
+        padding: 14px;
+        border: 1px solid #1f3a55;
     }
-    .card-title {
-        font-size: 12px;
-        color: #66cc88;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 8px;
-        border-bottom: 1px dashed #00ff41;
-        padding-bottom: 4px;
-    }
-
-    .form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-    }
-    @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr; } }
-    .form-group { display: flex; flex-direction: column; gap: 2px; }
-    .form-group label { font-size: 10px; color: #66cc88; }
-    .form-group input, .form-group select, .form-group textarea {
-        padding: 4px 6px;
-        background: #0a0f0a;
-        border: 1px solid #00ff41;
-        border-radius: 4px;
-        color: #00ff41;
+    .left-panel .section-title {
         font-size: 13px;
-        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #8ab4f8;
+        border-bottom: 1px solid #1f3a55;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+    }
+    .form-group {
+        margin-bottom: 10px;
+    }
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        color: #89a9c9;
+        margin-bottom: 2px;
+    }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%;
+        padding: 6px 8px;
+        background: #0a1520;
+        border: 1px solid #1f3a55;
+        border-radius: 4px;
+        color: #e0e8f0;
+        font-size: 13px;
         outline: none;
     }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-        border-color: #00ff41;
-        box-shadow: 0 0 10px rgba(0,255,65,0.2);
+        border-color: #4a8bc2;
+        box-shadow: 0 0 0 2px rgba(74,139,194,0.2);
     }
     .form-group textarea { resize: vertical; font-size: 12px; }
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .btn-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 6px;
+    }
+    .btn {
+        padding: 6px 18px;
+        border: none;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-primary {
+        background: #2a6a9a;
+        color: white;
+    }
+    .btn-primary:hover { background: #3a7aaa; }
+    .btn-danger {
+        background: #8a3a3a;
+        color: white;
+    }
+    .btn-danger:hover { background: #aa4a4a; }
+    .btn-outline {
+        background: transparent;
+        border: 1px solid #2a4a6a;
+        color: #8ab4f8;
+    }
+    .btn-outline:hover { background: #1a2a3a; }
+    .btn-sm { padding: 2px 10px; font-size: 11px; }
 
+    /* right panel - table */
+    .right-panel {
+        background: #142433;
+        border-radius: 6px;
+        padding: 12px;
+        border: 1px solid #1f3a55;
+        overflow-x: auto;
+    }
+    .right-panel .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .right-panel .table-header h2 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #8ab4f8;
+    }
+    .right-panel .table-header .badge {
+        background: #1a2a3a;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        color: #89a9c9;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    th {
+        text-align: left;
+        padding: 8px 6px;
+        color: #89a9c9;
+        font-weight: 500;
+        border-bottom: 1px solid #1f3a55;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    td {
+        padding: 8px 6px;
+        border-bottom: 1px solid #0f1a2b;
+        vertical-align: middle;
+    }
+    tr:hover td { background: #1a2a3a; }
+    .meeting-id {
+        font-weight: 600;
+        color: #8ab4f8;
+        cursor: pointer;
+    }
+    .meeting-id:hover { text-decoration: underline; }
+    .badge-type {
+        display: inline-block;
+        padding: 0 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 18px;
+        border: 1px solid;
+    }
+    .badge-indian { border-color: #4a8bc2; color: #4a8bc2; }
+    .badge-english { border-color: #6a8a6a; color: #6a8a6a; }
+    .badge-custom { border-color: #c29a4a; color: #c29a4a; }
+    .status-valid { color: #6aaa6a; }
+    .status-invalid { color: #aa6a6a; }
+
+    .action-btns {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+    .action-btns .btn { font-size: 11px; padding: 2px 8px; }
+
+    .log {
+        margin-top: 10px;
+        padding: 6px 10px;
+        background: #0a1520;
+        border: 1px solid #1f3a55;
+        border-radius: 4px;
+        font-size: 12px;
+        color: #89a9c9;
+        font-family: monospace;
+        min-height: 28px;
+    }
+    .log .ok { color: #6aaa6a; }
+    .log .err { color: #aa6a6a; }
+    .log .info { color: #4a8bc2; }
+
+    /* custom names toggle */
     #customBox {
         display: none;
         margin-top: 6px;
         padding: 8px;
-        border: 1px solid #00ff41;
+        background: #0a1520;
+        border: 1px solid #1f3a55;
         border-radius: 4px;
-        background: rgba(0,255,65,0.03);
     }
-    #customBox .name-status { font-size: 10px; color: #66cc88; margin-top: 4px; }
-    #customBox .name-status .ok { color: #00ff41; }
-    #customBox .name-status .err { color: #ff3333; }
-
-    .actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 10px;
-    }
-    .btn {
-        padding: 4px 12px;
-        border: 1px solid #00ff41;
-        border-radius: 4px;
-        background: transparent;
-        color: #00ff41;
-        font-family: 'Courier New', monospace;
-        font-weight: 600;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-    .btn-primary { background: #00ff41; color: #0a0f0a; text-shadow: none; }
-    .btn-primary:hover { background: #00cc33; box-shadow: 0 0 20px #00ff41; }
-    .btn-danger { border-color: #ff3333; color: #ff3333; }
-    .btn-danger:hover { background: #ff3333; color: #0a0f0a; box-shadow: 0 0 20px #ff3333; }
-    .btn-outline { color: #66cc88; border-color: #66cc88; }
-    .btn-outline:hover { background: rgba(0,255,65,0.1); }
-    .btn-sm { padding: 1px 8px; font-size: 11px; }
-
-    .log {
-        margin-top: 8px;
-        padding: 4px 8px;
-        border: 1px solid #00ff41;
-        border-radius: 4px;
-        background: rgba(0,255,65,0.02);
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        min-height: 24px;
-        color: #66cc88;
-    }
-    .log .ok { color: #00ff41; }
-    .log .err { color: #ff3333; }
-    .log .info { color: #66cc88; }
-
-    .workers-panel {
-        border: 1px solid #00ff41;
-        border-radius: 6px;
-        padding: 10px;
-        background: rgba(0,255,65,0.02);
-        position: sticky;
-        top: 10px;
-    }
-    .workers-panel .panel-title {
-        font-size: 11px;
-        color: #66cc88;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
-    }
-    .workers-panel .panel-title span { color: #00ff41; }
-    .workers-scroll {
-        max-height: 300px;
-        overflow-y: auto;
-        padding-right: 2px;
-    }
-    .workers-scroll::-webkit-scrollbar { width: 3px; }
-    .workers-scroll::-webkit-scrollbar-track { background: #0a0f0a; }
-    .workers-scroll::-webkit-scrollbar-thumb { background: #00ff41; border-radius: 4px; }
-    .worker-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 4px 6px;
-        border: 1px solid #00ff41;
-        border-radius: 4px;
-        margin-bottom: 3px;
-        font-size: 11px;
-        font-family: 'Courier New', monospace;
-        background: rgba(0,255,65,0.02);
-    }
-    .worker-item .name { color: #00ff41; }
-    .worker-item .cap { color: #66cc88; }
-    .worker-item .cap .free { color: #00ff41; }
-
-    .table-wrap { overflow-x: auto; }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-    }
-    th, td {
-        padding: 4px 6px;
-        text-align: left;
-        border-bottom: 1px solid #00ff41;
-        vertical-align: middle;
-    }
-    th {
-        color: #66cc88;
-        font-weight: 500;
-        font-size: 9px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    tr:hover td { background: rgba(0,255,65,0.05); }
-    .meeting-code {
-        font-weight: 600;
-        color: #00ff41;
-        font-family: monospace;
-        font-size: 13px;
-        cursor: pointer;
-        text-shadow: 0 0 8px #00ff41;
-    }
-    .meeting-code:hover { text-decoration: underline; }
-    .badge {
-        display: inline-block;
-        padding: 0 6px;
-        border-radius: 12px;
-        font-size: 9px;
-        font-weight: 500;
-        line-height: 16px;
-        border: 1px solid;
-    }
-    .badge-indian { border-color: #00ff41; color: #00ff41; }
-    .badge-english { border-color: #66cc88; color: #66cc88; }
-    .badge-custom { border-color: #ffaa00; color: #ffaa00; }
-
-    .timer-bar {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-    }
-    .timer-bar .progress {
-        flex: 1;
-        height: 3px;
-        background: #1a2a1a;
-        border-radius: 4px;
-        overflow: hidden;
-        border: 1px solid #00ff41;
-    }
-    .timer-bar .progress .fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width 1s linear;
-        background: #00ff41;
-    }
-    .timer-bar .time-text {
-        font-family: monospace;
-        font-size: 10px;
-        min-width: 28px;
-        text-align: right;
-        color: #66cc88;
-    }
-    .timer-bar .time-text.warning { color: #ffaa00; }
-    .timer-bar .time-text.danger { color: #ff3333; }
-
-    .empty { text-align: center; color: #66cc88; padding: 12px 0; font-size: 11px; }
-    .footer-meta {
-        margin-top: 6px;
-        padding-top: 6px;
-        border-top: 1px solid #00ff41;
-        font-size: 10px;
-        color: #66cc88;
-    }
+    #customBox .name-status { font-size: 11px; color: #89a9c9; margin-top: 4px; }
+    #customBox .name-status .ok { color: #6aaa6a; }
+    #customBox .name-status .err { color: #aa6a6a; }
 
     @media (max-width: 600px) {
-        body { padding: 6px; }
         .header h1 { font-size: 16px; }
-        .status-badge { font-size: 9px; padding: 0 6px; }
-        .theme-toggle, .mode-switch { font-size: 14px; padding: 0 6px; height: 24px; }
-        .stats-row { grid-template-columns: repeat(3, 1fr); gap: 4px; }
-        .stat-item .num { font-size: 16px; }
-        .stat-item.highlight .num { font-size: 18px; }
-        .stat-item { padding: 3px 2px; }
-        .stat-item .label { font-size: 7px; }
-        .card { padding: 8px; }
-        .form-group input, .form-group select, .form-group textarea { font-size: 16px; padding: 6px; }
-        .btn { font-size: 13px; padding: 6px 12px; }
-        .workers-panel { position: static; }
-        table { font-size: 10px; }
-        th, td { padding: 2px 4px; }
-        .meeting-code { font-size: 10px; }
-        .timer-bar .time-text { font-size: 9px; }
+        .header-right { font-size: 12px; gap: 8px; }
+        .form-row { grid-template-columns: 1fr; }
     }
 </style>
 </head>
 <body>
 <div class="container">
+    <!-- header -->
     <div class="header">
-        <h1>🔒 Junaid <span>Members Panel</span></h1>
-        <div class="header-actions">
-            <div class="status-badge"><span class="dot"></span><span id="statusText">Connected</span><span style="margin-left:4px;color:#66cc88;">|</span><span id="liveTime" style="font-size:11px;"></span></div>
-            <div class="mode-switch">
-                <label>
-                    <span class="mode-label" id="modeLabel">Individual</span>
-                    <input type="checkbox" id="modeToggle" />
-                    <span class="mode-label" id="modeLabel2">Together</span>
-                </label>
-            </div>
-            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" style="font-size:16px;">🌙</button>
+        <h1>🔵 ZOOM <span>Panel</span></h1>
+        <div class="header-right">
+            <span class="usage">Usage: <strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></span>
+            <span id="liveTime" style="color:#89a9c9; font-size:13px;"></span>
+            <button class="btn btn-outline btn-sm" onclick="refresh()">⟳</button>
         </div>
     </div>
 
-    <div class="stats-row">
-        <div class="stat-item highlight"><div class="num" id="totalCap">0</div><div class="label">Total Capacity</div></div>
-        <div class="stat-item"><div class="num green" id="freeCap">0</div><div class="label">Free Capacity</div></div>
-        <div class="stat-item"><div class="num" id="workersN">0</div><div class="label">Workers</div></div>
-        <div class="stat-item"><div class="num" id="tasksN">0</div><div class="label">Active Tasks</div></div>
-        <div class="stat-item"><div class="num" id="botsN">0</div><div class="label">Running Bots</div></div>
-    </div>
-
+    <!-- main -->
     <div class="main-grid">
-        <div>
-            <div class="card">
-                <div class="card-title">▶ Start New Meeting</div>
-                <div class="form-grid">
-                    <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="5415403058"/></div>
-                    <div class="form-group"><label>Passcode</label><input id="passcode" placeholder="optional"/></div>
-                    <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/></div>
-                    <div class="form-group"><label>Duration (min)</label><input type="number" id="duration" value="120" min="1"/></div>
-                    <div class="form-group" style="grid-column:1/-1">
-                        <label>Name Type</label>
-                        <select id="nameType" onchange="toggleCustom()">
-                            <option value="indian">🇮🇳 Indian</option>
-                            <option value="english">🇺🇸 English</option>
-                            <option value="custom">✏️ Custom</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="customBox">
-                    <label style="font-size:10px;color:#66cc88;">Custom names (one per line)</label>
-                    <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
-                    <div class="name-status">Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong><span id="nameStatus"></span></div>
-                </div>
-                <div class="actions">
-                    <button class="btn btn-primary" onclick="startBots()">🚀 Start</button>
-                    <button class="btn btn-outline" onclick="refresh()">⟳ Refresh</button>
-                </div>
-                <div id="msg" class="log">[SYSTEM] Ready</div>
+        <!-- left panel -->
+        <div class="left-panel">
+            <div class="section-title">Add custom names</div>
+            <div class="form-group">
+                <label>Meeting ID:</label>
+                <input id="meetingId" placeholder="98695209590" />
             </div>
-
-            <div class="card">
-                <div class="card-title" style="display:flex;justify-content:space-between">
-                    <span>📋 Active Meetings</span>
-                    <span id="taskCount" style="color:#66cc88;text-transform:none;">0 running</span>
+            <div class="form-group">
+                <label>Meeting Password:</label>
+                <input id="passcode" placeholder="optional" />
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Members (1-100):</label>
+                    <input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()" />
                 </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead><tr><th>Task</th><th>Meeting</th><th>Bots</th><th>Type</th><th>Mode</th><th>Time Left</th><th style="text-align:center">Action</th></tr></thead>
-                        <tbody id="tbody"><tr><td colspan="7" class="empty">No active meetings</td></tr></tbody>
-                    </table>
+                <div class="form-group">
+                    <label>Name:</label>
+                    <select id="nameType" onchange="toggleCustom()">
+                        <option value="indian">🇮🇳 Indian</option>
+                        <option value="english">🇺🇸 English</option>
+                        <option value="custom">✏️ Custom</option>
+                    </select>
                 </div>
             </div>
+            <div id="customBox">
+                <label style="font-size:11px;color:#89a9c9;">Custom names (one per line)</label>
+                <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
+                <div class="name-status">Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong> <span id="nameStatus"></span></div>
+            </div>
+            <div class="form-group">
+                <label>Timeout (in seconds):</label>
+                <input type="number" id="duration" value="7200" min="60" />
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-primary" onclick="startBots()">▶ Start</button>
+                <button class="btn btn-danger" onclick="killAll()">⏹ Kill All</button>
+            </div>
+            <div id="msg" class="log">Ready</div>
         </div>
 
-        <div class="workers-panel">
-            <div class="panel-title"><span>🖥️ Workers</span><span id="workerCount">0</span></div>
-            <div class="workers-scroll" id="wlist"><div class="empty">No workers connected</div></div>
-            <div class="footer-meta">Total: <strong id="totalCapFooter">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCapFooter">0</strong></div>
+        <!-- right panel -->
+        <div class="right-panel">
+            <div class="table-header">
+                <h2>All Meetings</h2>
+                <span class="badge" id="taskCount">0 active</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Meeting ID</th>
+                        <th>Qty</th>
+                        <th>Start</th>
+                        <th>Time out</th>
+                        <th>Nm Type</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="7" style="text-align:center;color:#89a9c9;">No active meetings</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 const API = location.origin;
-const sio = io(API);
 const $ = id => document.getElementById(id);
 const meetingId = $('meetingId'), passcode = $('passcode'), botCount = $('botCount');
 const duration = $('duration'), nameType = $('nameType'), customNames = $('customNames');
-const customBox = $('customBox'), msg = $('msg'), tbody = $('tbody'), wlist = $('wlist');
-const totalCap = $('totalCap'), freeCap = $('freeCap'), workersN = $('workersN');
-const tasksN = $('tasksN'), botsN = $('botsN'), totalCapFooter = $('totalCapFooter');
-const freeCapFooter = $('freeCapFooter'), workerCount = $('workerCount'), taskCount = $('taskCount');
-const statusText = $('statusText'), liveTime = $('liveTime');
-const themeToggle = $('themeToggle'), modeToggle = $('modeToggle'), modeLabel = $('modeLabel'), modeLabel2 = $('modeLabel2');
-
-// Theme
-function getTheme(){ return localStorage.getItem('junaid_theme') || 'dark'; }
-function setTheme(theme){ 
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('junaid_theme', theme);
-    themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
-}
-setTheme(getTheme());
-themeToggle.addEventListener('click', ()=>{
-    const current = getTheme();
-    setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
-// Mode
-function getMode(){ return localStorage.getItem('junaid_mode') || 'individual'; }
-function setMode(mode){
-    localStorage.setItem('junaid_mode', mode);
-    const checked = mode === 'together';
-    modeToggle.checked = checked;
-    modeLabel.style.color = checked ? '' : '#00ff41';
-    modeLabel2.style.color = checked ? '#00ff41' : '';
-}
-setMode(getMode());
-modeToggle.addEventListener('change', ()=>{
-    const mode = modeToggle.checked ? 'together' : 'individual';
-    setMode(mode);
-});
+const customBox = $('customBox'), msg = $('msg'), tbody = $('tbody');
+const totalCap = $('totalCap'), totalCapMax = $('totalCapMax');
+const taskCount = $('taskCount'), liveTime = $('liveTime');
 
 function show(m, type='info'){
     const cls = type==='ok'?'ok':type==='err'?'err':'info';
@@ -793,67 +615,43 @@ async function refresh(){
             total += w.max_capacity || 0;
             free += w.free_capacity || 0;
         });
-        const wc = Object.keys(workers).length;
-        const tc = Object.keys(tasks).length;
-        let rb = 0;
-        Object.values(tasks).forEach(t=>{ rb += t.bot_count || 0; });
-
-        totalCap.textContent = total;
-        freeCap.textContent = free;
-        workersN.textContent = wc;
-        tasksN.textContent = tc;
-        botsN.textContent = rb;
-        totalCapFooter.textContent = total;
-        freeCapFooter.textContent = free;
-        workerCount.textContent = wc;
-        taskCount.textContent = tc + ' running';
-
-        if(!wc){
-            wlist.innerHTML = '<div class="empty">No workers connected</div>';
-        } else {
-            wlist.innerHTML = Object.entries(workers).map(([id,w])=>{
-                const f = w.free_capacity ?? 0;
-                const m = w.max_capacity ?? 0;
-                const pct = m>0 ? Math.round((f/m)*100) : 0;
-                return `<div class="worker-item"><span class="name">🟢 ${id}</span><span class="cap">${f}/${m} <span class="free">(${pct}%)</span></span></div>`;
-            }).join('');
-        }
+        totalCap.textContent = total - free;
+        totalCapMax.textContent = total;
+        taskCount.textContent = Object.keys(tasks).length + ' active';
 
         if(!Object.keys(tasks).length){
-            tbody.innerHTML = '<tr><td colspan="7" class="empty">No active meetings</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#89a9c9;">No active meetings</td></tr>';
         } else {
+            let idx = 0;
             tbody.innerHTML = Object.entries(tasks).map(([tid,t])=>{
+                idx++;
                 const meeting = t.meeting_code || 'N/A';
                 const bots = t.bot_count || 0;
                 const type = t.name_type || 'indian';
-                const mode = t.join_mode || 'individual';
-                const remaining = t.remaining_minutes ?? t.duration_minutes || 120;
+                const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
+                const startTime = t.started_at ? new Date(t.started_at).toLocaleTimeString() : '-';
                 const totalDur = t.duration_minutes || 120;
-                const pct = totalDur>0 ? ((totalDur - Math.max(0,remaining)) / totalDur * 100) : 0;
-                const clamped = Math.min(100, Math.max(0, pct));
-                const warn = remaining < 5 ? 'danger' : remaining < 15 ? 'warning' : '';
+                const timeOut = Math.ceil(remaining) + ' min';
                 const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
-                const modeIcon = mode === 'together' ? '👥' : '🚶';
+                const status = remaining > 0 ? 'valid' : 'invalid';
                 return `<tr>
-                    <td style="font-size:10px;color:#66cc88;">${tid}</td>
-                    <td class="meeting-code" onclick="alert('Screenshot not supported')">${meeting}</td>
+                    <td>${idx}</td>
+                    <td class="meeting-id" onclick="alert('Meeting: ${meeting}')">${meeting}</td>
                     <td>${bots}</td>
-                    <td><span class="badge badge-${typeBadge}">${type}</span></td>
-                    <td>${modeIcon}</td>
+                    <td>${startTime}</td>
+                    <td>${timeOut}</td>
+                    <td><span class="badge-type badge-${typeBadge}">${type}</span></td>
                     <td>
-                        <div class="timer-bar">
-                            <div class="progress"><div class="fill" style="width:${clamped}%;background:${remaining<5?'#ff3333':remaining<15?'#ffaa00':'#00ff41'}"></div></div>
-                            <span class="time-text ${warn}">${remaining>0?Math.ceil(remaining)+'m':'0m'}</span>
+                        <div class="action-btns">
+                            <button class="btn btn-outline btn-sm" onclick="refillTask('${tid}')">Refill</button>
+                            <button class="btn btn-danger btn-sm" onclick="killTask('${tid}')">Kill</button>
                         </div>
                     </td>
-                    <td style="text-align:center"><button class="btn btn-danger btn-sm" onclick="killTask('${tid}')">✕</button></td>
                 </tr>`;
             }).join('');
         }
-        statusText.textContent = 'Connected';
         show('Status refreshed', 'ok');
     } catch(e){
-        statusText.textContent = 'Offline';
         show(e.message || 'Refresh failed', 'err');
     }
 }
@@ -862,9 +660,8 @@ async function startBots(){
     const meeting = meetingId.value.trim().replace(/\s/g,'');
     const pass = passcode.value.trim();
     const bots = parseInt(botCount.value) || 10;
-    const dur = parseInt(duration.value) || 120;
+    const dur = parseInt(duration.value) / 60 || 120;
     const type = nameType.value;
-    const mode = getMode();
     let custom = null;
     if(type === 'custom'){
         custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
@@ -877,8 +674,8 @@ async function startBots(){
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
                 meeting_code: meeting, passcode: pass, bot_count: bots,
-                duration_minutes: dur, name_type: type, custom_names: custom,
-                join_mode: mode
+                duration_minutes: Math.ceil(dur), name_type: type, custom_names: custom,
+                join_mode: 'individual'
             })
         });
         const d = await r.json();
@@ -900,10 +697,32 @@ async function killTask(taskId){
         });
         const d = await r.json();
         if(r.ok){
-            show(`✅ Kill sent`, 'ok');
+            show(`Kill sent`, 'ok');
             setTimeout(refresh, 1000);
         } else {
             show(d.detail || 'Kill failed', 'err');
+        }
+    } catch(e){ show(e.message, 'err'); }
+}
+
+async function refillTask(taskId){
+    // Refill logic: just show info for now (you can implement add bots)
+    alert('Refill feature: add more bots to existing task (not implemented)');
+}
+
+async function killAll(){
+    if(!confirm('Kill ALL tasks?')) return;
+    try{
+        const r = await fetch(API+'/api/terminate', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({})
+        });
+        const d = await r.json();
+        if(r.ok){
+            show('All tasks killed', 'ok');
+            setTimeout(refresh, 1000);
+        } else {
+            show(d.detail || 'Kill all failed', 'err');
         }
     } catch(e){ show(e.message, 'err'); }
 }
