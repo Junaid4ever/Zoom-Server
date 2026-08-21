@@ -1,12 +1,12 @@
 # ============================================
-# ============================================
-# ZOOM BOT CENTRAL - Railway (FULL + RECONNECT FIX)
+# ZOOM BOT CENTRAL – FULL (LOGS + SCREENSHOT + FIX)
 # ============================================
 import os
 import uuid
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, List
+import base64
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import socketio
 
+# ----- SOCKET.IO SERVER -----
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins="*",
@@ -32,9 +33,12 @@ app.add_middleware(
 
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
-workers = {}
-running_tasks = {}
+# ----- IN-MEMORY STORAGE -----
+workers = {}             # worker_id -> {sid, max_capacity, free_capacity, last_seen}
+running_tasks = {}       # task_id -> {meeting_code, bot_count, worker_id, ...}
+bot_logs = {}            # task_id -> list of log entries
 
+# ----- PYDANTIC MODELS -----
 class StartBotRequest(BaseModel):
     meeting_code: str
     passcode: str = ""
@@ -48,6 +52,7 @@ class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
+# ----- SOCKET.IO EVENTS -----
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}")
@@ -57,7 +62,6 @@ async def disconnect(sid):
     # Remove worker only if it has no running tasks
     for wid, info in list(workers.items()):
         if info.get("sid") == sid:
-            # Check if this worker has any running tasks
             has_tasks = any(t.get("worker_id") == wid for t in running_tasks.values())
             if not has_tasks:
                 del workers[wid]
@@ -66,7 +70,7 @@ async def disconnect(sid):
                 # Keep worker but mark as offline (sid = None)
                 workers[wid]["sid"] = None
                 workers[wid]["last_seen"] = datetime.now().isoformat()
-                print(f"[SIO] Worker {wid} went offline but has running tasks, kept state.")
+                print(f"[SIO] Worker {wid} offline (tasks remain)")
             break
 
 @sio.event
@@ -76,22 +80,19 @@ async def register_worker(sid, data):
     now = datetime.now().isoformat()
 
     if wid in workers:
-        # Worker reconnecting – keep existing free_capacity
+        # Reconnect – keep free_capacity, update sid
         workers[wid]["sid"] = sid
-        workers[wid]["last_seen"] = now
-        # Ensure max_capacity is correct (could have changed)
         workers[wid]["max_capacity"] = max_cap
-        # free_capacity remains unchanged
+        workers[wid]["last_seen"] = now
         print(f"[SIO] Worker {wid} reconnected, free_capacity unchanged: {workers[wid]['free_capacity']}")
     else:
-        # New worker
         workers[wid] = {
             "sid": sid,
             "max_capacity": max_cap,
             "free_capacity": max_cap,
             "last_seen": now
         }
-        print(f"[SIO] Registered new worker {wid} | capacity={max_cap}")
+        print(f"[SIO] New worker {wid} | capacity={max_cap}")
 
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
 
@@ -108,14 +109,47 @@ async def task_completed(sid, data):
     if tid and tid in running_tasks:
         wid = running_tasks[tid].get("worker_id")
         if wid and wid in workers:
-            # Restore capacity
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
                 workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
             )
         del running_tasks[tid]
+        # Also clean logs
+        if tid in bot_logs:
+            del bot_logs[tid]
         print(f"[SIO] Task completed: {tid}")
 
+@sio.event
+async def bot_log(sid, data):
+    """Receive log from worker and broadcast to all clients"""
+    task_id = data.get("task_id")
+    if task_id not in bot_logs:
+        bot_logs[task_id] = []
+    bot_logs[task_id].append(data)
+    # Broadcast to all connected dashboard clients
+    await sio.emit("new_log", data)
+
+@sio.event
+async def request_screenshot(sid, data):
+    """Client requests screenshot for a task; forward to worker"""
+    task_id = data.get("task_id")
+    if task_id not in running_tasks:
+        await sio.emit("screenshot_response", {"task_id": task_id, "error": "Task not found"}, to=sid)
+        return
+    wid = running_tasks[task_id].get("worker_id")
+    if wid not in workers or not workers[wid].get("sid"):
+        await sio.emit("screenshot_response", {"task_id": task_id, "error": "Worker offline"}, to=sid)
+        return
+    worker_sid = workers[wid]["sid"]
+    await sio.emit("request_screenshot", {"task_id": task_id}, to=worker_sid)
+
+@sio.event
+async def screenshot_response(sid, data):
+    """Worker sends screenshot; broadcast to all clients"""
+    # Broadcast so anyone viewing dashboard can see it
+    await sio.emit("screenshot_response", data)
+
+# ----- API ENDPOINTS -----
 @app.get("/health")
 async def health():
     return {"ok": True, "workers": len(workers)}
@@ -162,6 +196,10 @@ async def start_bots(req: StartBotRequest):
         free = int(info.get("free_capacity", 0))
         if free <= 0:
             continue
+        # Only assign if worker is connected (sid not None)
+        if not info.get("sid"):
+            print(f"⚠️ Worker {wid} is offline, skipping")
+            continue
         give = min(free, remaining)
         task_id = str(uuid.uuid4())[:8]
         payload = {
@@ -174,13 +212,7 @@ async def start_bots(req: StartBotRequest):
             "custom_names": req.custom_names,
             "join_mode": req.join_mode or "individual"
         }
-        # Only send if worker is connected (sid not None)
-        if info.get("sid"):
-            await sio.emit("new_task", payload, to=info["sid"])
-        else:
-            # Worker offline – we cannot assign task, skip
-            print(f"⚠️ Worker {wid} is offline, cannot assign task.")
-            continue
+        await sio.emit("new_task", payload, to=info["sid"])
         running_tasks[task_id] = {
             "task_id": task_id,
             "meeting_code": meeting,
@@ -198,7 +230,7 @@ async def start_bots(req: StartBotRequest):
         print(f"[API] Task {task_id} → {wid} ({give} bots) mode={req.join_mode}")
 
     if not assigned:
-        raise HTTPException(503, "No free capacity. Start Colab worker first.")
+        raise HTTPException(503, "No free capacity or no connected workers. Start Colab worker first.")
 
     return {
         "success": True,
@@ -226,24 +258,26 @@ async def terminate(req: Optional[TerminateRequest] = None):
                 workers[wid].get("free_capacity", 0) + running_tasks[task_id].get("bot_count", 0)
             )
         del running_tasks[task_id]
+        if task_id in bot_logs:
+            del bot_logs[task_id]
         print(f"[API] Terminate task {task_id}")
         return {"success": True, "message": f"Task {task_id} terminated"}
 
     elif req and req.meeting_code:
         meeting = req.meeting_code
-        # Find all tasks with this meeting code
         to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
         for tid in to_kill:
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
                 await sio.emit("terminate", {"task_id": tid, "meeting_code": meeting}, to=workers[wid]["sid"])
-            # Restore capacity
             if wid and wid in workers:
                 workers[wid]["free_capacity"] = min(
                     workers[wid]["max_capacity"],
                     workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
                 )
             del running_tasks[tid]
+            if tid in bot_logs:
+                del bot_logs[tid]
         print(f"[API] Terminate meeting {meeting}")
         return {"success": True, "message": f"Meeting {meeting} terminated"}
 
@@ -253,18 +287,18 @@ async def terminate(req: Optional[TerminateRequest] = None):
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
                 await sio.emit("terminate", {"task_id": tid, "meeting_code": None}, to=workers[wid]["sid"])
-            # Restore capacity
             if wid and wid in workers:
                 workers[wid]["free_capacity"] = min(
                     workers[wid]["max_capacity"],
                     workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
                 )
         running_tasks.clear()
+        bot_logs.clear()
         print(f"[API] Terminate ALL")
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# UPDATED HTML – Stats Row, Live Clock, Mobile Optimized
+# REDESIGNED DASHBOARD WITH LOGS & SCREENSHOT
 # ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -273,7 +307,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
     <title>Junaid Members Panel (Zoom)</title>
     <style>
-        /* ----- CSS VARIABLES (Dark/Light) ----- */
         :root {
             --bg-body: #0a0e17;
             --bg-card: #0d1117;
@@ -295,6 +328,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             --scrollbar-thumb: #30363d;
             --hover-bg: #161b22;
             --stat-bg: rgba(88,166,255,0.08);
+            --log-info: #8b949e;
+            --log-success: #3fb950;
+            --log-error: #f85149;
+            --log-warning: #d29922;
         }
         [data-theme="light"] {
             --bg-body: #f0f6fc;
@@ -317,6 +354,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             --scrollbar-thumb: #c0c8d0;
             --hover-bg: #f6f8fa;
             --stat-bg: rgba(9,105,218,0.08);
+            --log-info: #656d76;
+            --log-success: #1a7f37;
+            --log-error: #cf222e;
+            --log-warning: #9a6700;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body {
@@ -328,7 +369,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             transition: background 0.3s, color 0.3s;
         }
         .container { max-width:1400px; margin:0 auto; }
-        /* ----- HEADER ----- */
         .header {
             display: flex;
             justify-content: space-between;
@@ -427,7 +467,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         .mode-label { white-space: nowrap; }
         .mode-label.active { color: var(--accent-blue); }
 
-        /* ----- STATS ROW (highlighted total capacity) ----- */
         .stats-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
@@ -467,7 +506,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             font-size: 26px;
         }
 
-        /* ----- MAIN GRID (left + right panel) ----- */
         .main-grid {
             display: grid;
             grid-template-columns: 1fr 280px;
@@ -477,7 +515,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             .main-grid { grid-template-columns: 1fr; }
         }
 
-        /* ----- CARDS ----- */
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -495,7 +532,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             margin-bottom: 10px;
         }
 
-        /* ----- FORM ----- */
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -583,7 +619,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         .log .err { color: var(--accent-red); }
         .log .info { color: var(--accent-blue); }
 
-        /* ----- WORKERS PANEL (right) ----- */
         .workers-panel {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -628,7 +663,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         .worker-item .cap { color: var(--text-secondary); }
         .worker-item .cap .free { color: var(--accent-green); }
 
-        /* ----- TABLE ----- */
         .table-wrap { overflow-x: auto; }
         table {
             width: 100%;
@@ -654,7 +688,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             color: var(--accent-blue);
             font-family: monospace;
             font-size: 13px;
+            cursor: pointer;
         }
+        .meeting-code:hover { text-decoration: underline; }
         .badge {
             display: inline-block;
             padding: 0 8px;
@@ -703,7 +739,70 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             color: var(--text-secondary);
         }
 
-        /* ----- RESPONSIVE FINE-TUNE ----- */
+        /* Live Logs Container */
+        .log-container {
+            height: 150px;
+            overflow-y: auto;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 8px;
+        }
+        .log-container .log-entry {
+            padding: 1px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .log-container .log-entry .timestamp {
+            color: var(--text-muted);
+            margin-right: 6px;
+        }
+        .log-container .log-entry .level-info { color: var(--log-info); }
+        .log-container .log-entry .level-success { color: var(--log-success); }
+        .log-container .log-entry .level-error { color: var(--log-error); }
+        .log-container .log-entry .level-warning { color: var(--log-warning); }
+
+        /* Screenshot Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            background: none;
+            border: none;
+        }
+        .modal-close:hover { color: var(--text-primary); }
+        .modal-content img {
+            max-width: 100%;
+            max-height: 80vh;
+            border-radius: 6px;
+        }
+
         @media (max-width: 600px) {
             body { padding: 8px; }
             .header h1 { font-size: 17px; }
@@ -718,13 +817,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             .stat-item { padding: 4px 2px; }
             .stat-item .label { font-size: 8px; }
             .card { padding: 10px; }
-            .form-group input, .form-group select, .form-group textarea { font-size: 16px; padding: 8px; }  /* avoid zoom on iOS */
+            .form-group input, .form-group select, .form-group textarea { font-size: 16px; padding: 8px; }
             .btn { font-size: 14px; padding: 8px 16px; }
             .workers-panel { position: static; }
             table { font-size: 11px; }
             th, td { padding: 4px 6px; }
             .meeting-code { font-size: 11px; }
             .timer-bar .time-text { font-size: 10px; }
+            .log-container { height: 100px; }
         }
     </style>
 </head>
@@ -751,7 +851,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- STATS ROW (Total Capacity Highlighted) -->
+    <!-- STATS ROW -->
     <div class="stats-row">
         <div class="stat-item highlight">
             <div class="num" id="totalCap">0</div>
@@ -828,6 +928,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                     </table>
                 </div>
             </div>
+
+            <!-- LIVE LOGS -->
+            <div class="card">
+                <div class="card-title">📝 Live Logs</div>
+                <div id="log-container" class="log-container">
+                    <div class="empty">Waiting for logs...</div>
+                </div>
+            </div>
         </div>
 
         <!-- RIGHT PANEL – WORKERS -->
@@ -841,8 +949,18 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     </div>
 </div>
 
+<!-- SCREENSHOT MODAL -->
+<div id="screenshot-modal" class="modal" onclick="if(event.target===this) closeModal();">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <img id="screenshot-img" src="" alt="Screenshot" />
+    </div>
+</div>
+
+<!-- SOCKET.IO CLIENT -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script>
-// ===== DOM REFS =====
+// ===== CONFIG & DOM =====
 const API = location.origin;
 const $ = id => document.getElementById(id);
 const meetingId = $('meetingId');
@@ -870,6 +988,44 @@ const themeToggle = $('themeToggle');
 const modeToggle = $('modeToggle');
 const modeLabel = $('modeLabel');
 const modeLabel2 = $('modeLabel2');
+const logContainer = $('log-container');
+const screenshotImg = $('screenshot-img');
+
+// ===== SOCKET.IO =====
+const sio = io(API);
+sio.on('connect', () => {
+    console.log('Connected to server');
+    statusText.textContent = 'Connected';
+});
+sio.on('disconnect', () => {
+    statusText.textContent = 'Offline';
+});
+sio.on('new_log', (data) => {
+    // Append log entry
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    const ts = data.timestamp ? data.timestamp.slice(11,19) : '';
+    const level = data.level || 'info';
+    const bot = data.bot_tag || '';
+    const msg = data.message || '';
+    entry.innerHTML = `<span class="timestamp">${ts}</span> <span class="level-${level}">[${level}]</span> <strong>${bot}</strong> ${msg}`;
+    logContainer.appendChild(entry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+    // Limit entries to 200 to avoid memory issues
+    while (logContainer.children.length > 200) {
+        logContainer.removeChild(logContainer.firstChild);
+    }
+});
+sio.on('screenshot_response', (data) => {
+    if (data.error) {
+        alert('Screenshot error: ' + data.error);
+        return;
+    }
+    if (data.image) {
+        screenshotImg.src = 'data:image/png;base64,' + data.image;
+        $('screenshot-modal').style.display = 'flex';
+    }
+});
 
 // ===== THEME =====
 function getTheme(){ return localStorage.getItem('junaid_theme') || 'dark'; }
@@ -920,7 +1076,15 @@ function updCount(){
 }
 customNames.addEventListener('input', updCount);
 
-// ===== LIVE CLOCK (updates every second) =====
+function closeModal() {
+    $('screenshot-modal').style.display = 'none';
+}
+
+function requestScreenshot(taskId) {
+    sio.emit('request_screenshot', { task_id: taskId });
+}
+
+// ===== LIVE CLOCK =====
 function updateClock(){
     liveTime.textContent = new Date().toLocaleTimeString();
 }
@@ -945,7 +1109,6 @@ async function refresh(){
         let runningBots = 0;
         Object.values(tasks).forEach(t=>{ runningBots += t.bot_count || 0; });
 
-        // Update stats
         totalCap.textContent = total;
         freeCap.textContent = free;
         workersN.textContent = workerCountVal;
@@ -993,7 +1156,7 @@ async function refresh(){
                 const modeIcon = mode === 'together' ? '👥' : '🚶';
                 return `<tr>
                     <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${tid}</td>
-                    <td class="meeting-code">${meeting}</td>
+                    <td class="meeting-code" onclick="requestScreenshot('${tid}')">${meeting}</td>
                     <td>${bots}</td>
                     <td><span class="badge badge-${typeBadge}">${type}</span></td>
                     <td>${modeIcon}</td>
@@ -1072,7 +1235,7 @@ async function killTask(taskId){
     } catch(e){ show(e.message, 'err'); }
 }
 
-// ===== AUTO REFRESH (every 5 seconds) + INITIAL LOAD =====
+// ===== AUTO REFRESH + INIT =====
 setInterval(refresh, 5000);
 refresh();
 </script>
