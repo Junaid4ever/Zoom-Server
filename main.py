@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL - Railway (FULL + MODE TOGGLE)
+# ZOOM BOT CENTRAL - Railway (UPDATED HTML)
 # ============================================
 import os
 import uuid
@@ -225,7 +225,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# REDESIGNED DASHBOARD (Clean, Modern, Responsive)
+# UPDATED HTML – Stats Row, Live Clock, Mobile Optimized
 # ============================================
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -234,6 +234,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
     <title>Junaid Members Panel (Zoom)</title>
     <style>
+        /* ----- CSS VARIABLES (Dark/Light) ----- */
         :root {
             --bg-body: #0a0e17;
             --bg-card: #0d1117;
@@ -254,6 +255,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             --badge-custom: #3a2a1a;
             --scrollbar-thumb: #30363d;
             --hover-bg: #161b22;
+            --stat-bg: rgba(88,166,255,0.08);
         }
         [data-theme="light"] {
             --bg-body: #f0f6fc;
@@ -275,188 +277,421 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             --badge-custom: #f0e4d5;
             --scrollbar-thumb: #c0c8d0;
             --hover-bg: #f6f8fa;
+            --stat-bg: rgba(9,105,218,0.08);
         }
-        * { margin:0; padding:0; box-sizing:border-box }
+        * { margin:0; padding:0; box-sizing:border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: var(--bg-body);
             color: var(--text-primary);
             min-height: 100vh;
-            padding: 16px;
+            padding: 12px;
             transition: background 0.3s, color 0.3s;
         }
-        .container { max-width:1400px; margin:0 auto }
+        .container { max-width:1400px; margin:0 auto; }
+        /* ----- HEADER ----- */
         .header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
             background: var(--header-bg);
-            border-radius: 16px;
+            border-radius: 14px;
             border: 1px solid var(--header-border);
-            margin-bottom: 20px;
-            flex-wrap: wrap; gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 8px;
             transition: background 0.3s, border-color 0.3s;
         }
         .header h1 {
-            font-size: 22px; font-weight: 700;
+            font-size: 20px;
+            font-weight: 700;
             background: linear-gradient(90deg, var(--accent-blue), #79c0ff);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.2px;
         }
-        .header h1 span { font-weight:300; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary) }
-        .header-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+        .header h1 span { font-weight:300; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary); }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         .status-badge {
-            display: flex; align-items: center; gap: 6px;
-            background: var(--bg-card); padding: 4px 14px; border-radius: 20px;
-            border: 1px solid var(--border-color); font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-card);
+            padding: 2px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            font-size: 12px;
+            white-space: nowrap;
         }
         .status-badge .dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: var(--accent-green); animation: pulse 2s infinite;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
         }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .theme-toggle {
-            background: var(--bg-card); border: 1px solid var(--border-color);
-            border-radius: 30px; padding: 4px 12px; cursor: pointer;
-            font-size: 20px; line-height: 1; transition: all 0.2s;
+        .theme-toggle, .mode-switch {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 30px;
+            padding: 2px 10px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: all 0.2s;
             color: var(--text-primary);
+            height: 30px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
-        .theme-toggle:hover { transform: scale(1.05); border-color: var(--accent-blue) }
-        .main-grid { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
-        @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr } }
-        .card {
-            background: var(--bg-card); border: 1px solid var(--border-color);
-            border-radius: 12px; padding: 16px; margin-bottom: 16px;
-            transition: background 0.3s, border-color 0.3s;
-        }
-        .card-title {
-            font-size: 13px; font-weight: 600; color: var(--text-secondary);
-            text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px;
-        }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr } }
-        .form-group { display: flex; flex-direction: column; gap: 3px }
-        .form-group label { font-size: 12px; color: var(--text-secondary); font-weight: 500 }
-        .form-group input, .form-group select, .form-group textarea {
-            padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border-color);
-            border-radius: 8px; color: var(--text-primary); font-size: 14px;
-            transition: border-color 0.2s, background 0.3s, color 0.3s;
-        }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(88,166,255,0.15);
-        }
-        .form-group textarea { resize: vertical; font-family: monospace; font-size: 13px }
-        #customBox {
-            display: none; margin-top: 10px; padding: 12px;
-            background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px;
-        }
-        #customBox .name-status { font-size: 12px; color: var(--text-secondary); margin-top: 6px }
-        #customBox .name-status .ok { color: var(--accent-green) }
-        #customBox .name-status .err { color: var(--accent-red) }
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px }
-        .btn {
-            padding: 8px 18px; border: none; border-radius: 8px;
-            font-weight: 600; font-size: 14px; cursor: pointer;
-            transition: all 0.2s; display: inline-flex; align-items: center; gap: 5px;
-        }
-        .btn-primary { background: var(--accent-green); color: #fff }
-        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px) }
-        .btn-danger { background: var(--accent-red); color: #fff }
-        .btn-danger:hover { filter: brightness(1.1); transform: translateY(-1px) }
-        .btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color) }
-        .btn-outline:hover { background: var(--hover-bg); color: var(--text-primary) }
-        .btn-sm { padding: 3px 10px; font-size: 12px }
-        .log {
-            margin-top: 12px; padding: 8px 12px; background: var(--bg-body);
-            border: 1px solid var(--border-color); border-radius: 8px;
-            font-family: monospace; font-size: 13px; min-height: 36px;
-            color: var(--text-secondary);
-        }
-        .log .ok { color: var(--accent-green) }
-        .log .err { color: var(--accent-red) }
-        .log .info { color: var(--accent-blue) }
-        .workers-panel {
-            background: var(--bg-card); border: 1px solid var(--border-color);
-            border-radius: 12px; padding: 16px; height: fit-content;
-            position: sticky; top: 16px;
-        }
-        .workers-panel .panel-title {
-            font-size: 13px; font-weight: 600; color: var(--text-secondary);
-            text-transform: uppercase; letter-spacing: 0.4px;
-            margin-bottom: 10px; display: flex; justify-content: space-between;
-        }
-        .workers-panel .panel-title span { color: var(--accent-blue) }
-        .workers-scroll {
-            max-height: 400px; overflow-y: auto; padding-right: 4px;
-        }
-        .workers-scroll::-webkit-scrollbar { width: 4px }
-        .workers-scroll::-webkit-scrollbar-track { background: var(--bg-body) }
-        .workers-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px }
-        .worker-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 8px 10px; background: var(--bg-body); border: 1px solid var(--border-color);
-            border-radius: 6px; margin-bottom: 5px; font-size: 13px; font-family: monospace;
-        }
-        .worker-item .name { color: var(--accent-blue) }
-        .worker-item .cap { color: var(--text-secondary) }
-        .worker-item .cap .free { color: var(--accent-green) }
-        .worker-item .online { color: var(--accent-green); font-size: 10px }
-        .table-wrap { overflow-x: auto }
-        table { width: 100%; border-collapse: collapse; font-size: 14px }
-        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color) }
-        th { color: var(--text-secondary); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px }
-        tr:hover td { background: var(--hover-bg) }
-        .meeting-code { font-weight: 600; color: var(--accent-blue); font-family: monospace }
-        .badge {
-            display: inline-block; padding: 1px 10px; border-radius: 12px;
-            font-size: 11px; font-weight: 500;
-        }
-        .badge-indian { background: var(--badge-indian); color: var(--accent-green) }
-        .badge-english { background: var(--badge-english); color: var(--accent-blue) }
-        .badge-custom { background: var(--badge-custom); color: var(--accent-yellow) }
-        .timer-bar {
-            display: flex; align-items: center; gap: 8px;
-        }
-        .timer-bar .progress {
-            flex: 1; height: 3px; background: var(--border-color); border-radius: 4px; overflow: hidden;
-        }
-        .timer-bar .progress .fill {
-            height: 100%; border-radius: 4px; transition: width 1s linear;
-        }
-        .timer-bar .time-text {
-            font-family: monospace; font-size: 12px; min-width: 40px; text-align: right;
-            color: var(--text-secondary);
-        }
-        .timer-bar .time-text.warning { color: var(--accent-yellow) }
-        .timer-bar .time-text.danger { color: var(--accent-red) }
-        .empty { text-align: center; color: var(--text-secondary); padding: 20px 0; font-size: 13px }
-        .footer-meta { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary) }
-        .mode-switch {
-            display: flex; align-items: center; gap: 8px;
-            padding: 4px 12px; background: var(--bg-card); border: 1px solid var(--border-color);
-            border-radius: 30px; font-size: 12px; color: var(--text-secondary);
-        }
+        .theme-toggle:hover, .mode-switch:hover { transform: scale(1.05); border-color: var(--accent-blue); }
         .mode-switch label {
-            display: flex; align-items: center; gap: 4px; cursor: pointer;
-            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
         }
         .mode-switch input[type="checkbox"] {
-            appearance: none; width: 34px; height: 18px; background: var(--border-color);
-            border-radius: 20px; position: relative; cursor: pointer; transition: background 0.3s;
+            appearance: none;
+            width: 28px;
+            height: 16px;
+            background: var(--border-color);
+            border-radius: 20px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
             flex-shrink: 0;
         }
         .mode-switch input[type="checkbox"]::after {
-            content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-            background: var(--bg-card); border-radius: 50%; transition: transform 0.3s;
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
+            background: var(--bg-card);
+            border-radius: 50%;
+            transition: transform 0.3s;
         }
-        .mode-switch input[type="checkbox"]:checked { background: var(--accent-blue) }
-        .mode-switch input[type="checkbox"]:checked::after { transform: translateX(16px) }
-        .mode-switch .mode-label { font-weight: 500; white-space: nowrap }
-        .mode-switch .mode-label.active { color: var(--accent-blue) }
+        .mode-switch input[type="checkbox"]:checked { background: var(--accent-blue); }
+        .mode-switch input[type="checkbox"]:checked::after { transform: translateX(12px); }
+        .mode-label { white-space: nowrap; }
+        .mode-label.active { color: var(--accent-blue); }
+
+        /* ----- STATS ROW (highlighted total capacity) ----- */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .stat-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px 6px;
+            text-align: center;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .stat-item .num {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            line-height: 1.2;
+        }
+        .stat-item .num.green { color: var(--accent-green); }
+        .stat-item .num.red { color: var(--accent-red); }
+        .stat-item .num.yellow { color: var(--accent-yellow); }
+        .stat-item .label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-top: 2px;
+        }
+        .stat-item.highlight {
+            border-color: var(--accent-blue);
+            background: var(--stat-bg);
+        }
+        .stat-item.highlight .num {
+            color: var(--accent-blue);
+            font-size: 26px;
+        }
+
+        /* ----- MAIN GRID (left + right panel) ----- */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 14px;
+        }
+        @media (max-width: 820px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ----- CARDS ----- */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 14px;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .card-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 10px;
+        }
+
+        /* ----- FORM ----- */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        @media (max-width: 500px) {
+            .form-grid { grid-template-columns: 1fr; }
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .form-group label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 6px 8px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            transition: border-color 0.2s, background 0.3s, color 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(88,166,255,0.2);
+        }
+        .form-group textarea { resize: vertical; font-family: monospace; font-size: 12px; }
+
+        #customBox {
+            display: none;
+            margin-top: 8px;
+            padding: 10px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        #customBox .name-status { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+        #customBox .name-status .ok { color: var(--accent-green); }
+        #customBox .name-status .err { color: var(--accent-red); }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-primary { background: var(--accent-green); color: #fff; }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-danger { background: var(--accent-red); color: #fff; }
+        .btn-danger:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); }
+        .btn-outline:hover { background: var(--hover-bg); color: var(--text-primary); }
+        .btn-sm { padding: 2px 8px; font-size: 11px; }
+
+        .log {
+            margin-top: 10px;
+            padding: 6px 10px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            min-height: 30px;
+            color: var(--text-secondary);
+        }
+        .log .ok { color: var(--accent-green); }
+        .log .err { color: var(--accent-red); }
+        .log .info { color: var(--accent-blue); }
+
+        /* ----- WORKERS PANEL (right) ----- */
+        .workers-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            height: fit-content;
+            position: sticky;
+            top: 12px;
+        }
+        .workers-panel .panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .workers-panel .panel-title span { color: var(--accent-blue); }
+        .workers-scroll {
+            max-height: 350px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+        .workers-scroll::-webkit-scrollbar { width: 3px; }
+        .workers-scroll::-webkit-scrollbar-track { background: var(--bg-body); }
+        .workers-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+        .worker-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .worker-item .name { color: var(--accent-blue); }
+        .worker-item .cap { color: var(--text-secondary); }
+        .worker-item .cap .free { color: var(--accent-green); }
+
+        /* ----- TABLE ----- */
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        th {
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        tr:hover td { background: var(--hover-bg); }
+        .meeting-code {
+            font-weight: 600;
+            color: var(--accent-blue);
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 500;
+            line-height: 18px;
+        }
+        .badge-indian { background: var(--badge-indian); color: var(--accent-green); }
+        .badge-english { background: var(--badge-english); color: var(--accent-blue); }
+        .badge-custom { background: var(--badge-custom); color: var(--accent-yellow); }
+
+        .timer-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .timer-bar .progress {
+            flex: 1;
+            height: 3px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .timer-bar .progress .fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s linear;
+        }
+        .timer-bar .time-text {
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 32px;
+            text-align: right;
+            color: var(--text-secondary);
+        }
+        .timer-bar .time-text.warning { color: var(--accent-yellow); }
+        .timer-bar .time-text.danger { color: var(--accent-red); }
+
+        .empty { text-align: center; color: var(--text-secondary); padding: 16px 0; font-size: 12px; }
+        .footer-meta {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* ----- RESPONSIVE FINE-TUNE ----- */
+        @media (max-width: 600px) {
+            body { padding: 8px; }
+            .header h1 { font-size: 17px; }
+            .header-actions { gap: 4px; }
+            .status-badge { font-size: 10px; padding: 0 8px; }
+            .theme-toggle, .mode-switch { font-size: 15px; padding: 0 6px; height: 26px; }
+            .mode-switch input[type="checkbox"] { width: 24px; height: 14px; }
+            .mode-switch input[type="checkbox"]::after { width: 10px; height: 10px; }
+            .stats-row { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+            .stat-item .num { font-size: 18px; }
+            .stat-item.highlight .num { font-size: 20px; }
+            .stat-item { padding: 4px 2px; }
+            .stat-item .label { font-size: 8px; }
+            .card { padding: 10px; }
+            .form-group input, .form-group select, .form-group textarea { font-size: 16px; padding: 8px; }  /* avoid zoom on iOS */
+            .btn { font-size: 14px; padding: 8px 16px; }
+            .workers-panel { position: static; }
+            table { font-size: 11px; }
+            th, td { padding: 4px 6px; }
+            .meeting-code { font-size: 11px; }
+            .timer-bar .time-text { font-size: 10px; }
+        }
     </style>
 </head>
 <body>
 <div class="container">
+    <!-- HEADER -->
     <div class="header">
         <h1>🚀 Junaid <span>Members Panel (Zoom)</span></h1>
         <div class="header-actions">
@@ -464,7 +699,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                 <span class="dot"></span>
                 <span id="statusText">Connected</span>
                 <span style="color:var(--text-muted);margin-left:4px">|</span>
-                <span id="liveTime" style="font-family:monospace;font-size:12px"></span>
+                <span id="liveTime" style="font-family:monospace;font-size:11px"></span>
             </div>
             <div class="mode-switch" title="Toggle join mode">
                 <label>
@@ -476,8 +711,36 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
         </div>
     </div>
+
+    <!-- STATS ROW (Total Capacity Highlighted) -->
+    <div class="stats-row">
+        <div class="stat-item highlight">
+            <div class="num" id="totalCap">0</div>
+            <div class="label">Total Capacity</div>
+        </div>
+        <div class="stat-item">
+            <div class="num green" id="freeCap">0</div>
+            <div class="label">Free Capacity</div>
+        </div>
+        <div class="stat-item">
+            <div class="num" id="workersN">0</div>
+            <div class="label">Workers</div>
+        </div>
+        <div class="stat-item">
+            <div class="num" id="tasksN">0</div>
+            <div class="label">Active Tasks</div>
+        </div>
+        <div class="stat-item">
+            <div class="num" id="botsN">0</div>
+            <div class="label">Running Bots</div>
+        </div>
+    </div>
+
+    <!-- MAIN GRID -->
     <div class="main-grid">
+        <!-- LEFT COLUMN -->
         <div>
+            <!-- START BOTS CARD -->
             <div class="card">
                 <div class="card-title">📌 Start New Meeting</div>
                 <div class="form-grid">
@@ -495,9 +758,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                     </div>
                 </div>
                 <div id="customBox">
-                    <label style="font-size:12px;color:var(--text-secondary)">Custom names (one per line)</label>
-                    <textarea id="customNames" rows="4" placeholder="Rahul Sharma&#10;Arjun Singh&#10;Priya Patel"></textarea>
-                    <div class="name-status">Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong> <span id="nameStatus"></span></div>
+                    <label style="font-size:11px;color:var(--text-secondary)">Custom names (one per line)</label>
+                    <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh&#10;Priya Patel"></textarea>
+                    <div class="name-status">
+                        Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong>
+                        <span id="nameStatus"></span>
+                    </div>
                 </div>
                 <div class="actions">
                     <button class="btn btn-primary" onclick="startBots()">🚀 Start Bots</button>
@@ -505,6 +771,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                 </div>
                 <div id="msg" class="log">✅ Ready</div>
             </div>
+
+            <!-- ACTIVE MEETINGS -->
             <div class="card">
                 <div class="card-title" style="display:flex;justify-content:space-between">
                     <span>📋 Active Meetings</span>
@@ -512,20 +780,30 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                 </div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Task</th><th>Meeting</th><th>Bots</th><th>Type</th><th>Mode</th><th>Time Left</th><th style="text-align:center">Action</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Task</th><th>Meeting</th><th>Bots</th><th>Type</th><th>Mode</th><th>Time Left</th><th style="text-align:center">Action</th>
+                            </tr>
+                        </thead>
                         <tbody id="tbody"><tr><td colspan="7" class="empty">No active meetings</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
+
+        <!-- RIGHT PANEL – WORKERS -->
         <div class="workers-panel">
             <div class="panel-title"><span>🖥️ Connected Workers</span><span id="workerCount">0</span></div>
             <div class="workers-scroll" id="wlist"><div class="empty" style="padding:20px 0">No workers connected</div></div>
-            <div class="footer-meta">Total: <strong id="totalCap">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCap">0</strong></div>
+            <div class="footer-meta">
+                Total: <strong id="totalCapFooter">0</strong> &nbsp;|&nbsp; Free: <strong id="freeCapFooter">0</strong>
+            </div>
         </div>
     </div>
 </div>
+
 <script>
+// ===== DOM REFS =====
 const API = location.origin;
 const $ = id => document.getElementById(id);
 const meetingId = $('meetingId');
@@ -540,6 +818,11 @@ const tbody = $('tbody');
 const wlist = $('wlist');
 const totalCap = $('totalCap');
 const freeCap = $('freeCap');
+const workersN = $('workersN');
+const tasksN = $('tasksN');
+const botsN = $('botsN');
+const totalCapFooter = $('totalCapFooter');
+const freeCapFooter = $('freeCapFooter');
 const workerCount = $('workerCount');
 const taskCount = $('taskCount');
 const statusText = $('statusText');
@@ -549,181 +832,208 @@ const modeToggle = $('modeToggle');
 const modeLabel = $('modeLabel');
 const modeLabel2 = $('modeLabel2');
 
+// ===== THEME =====
 function getTheme(){ return localStorage.getItem('junaid_theme') || 'dark'; }
 function setTheme(theme){
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('junaid_theme', theme);
-  themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('junaid_theme', theme);
+    themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
 }
 setTheme(getTheme());
 themeToggle.addEventListener('click', ()=>{
-  const current = getTheme();
-  setTheme(current === 'dark' ? 'light' : 'dark');
+    const current = getTheme();
+    setTheme(current === 'dark' ? 'light' : 'dark');
 });
 
+// ===== MODE =====
 function getMode(){ return localStorage.getItem('junaid_mode') || 'individual'; }
 function setMode(mode){
-  localStorage.setItem('junaid_mode', mode);
-  const checked = mode === 'together';
-  modeToggle.checked = checked;
-  modeLabel.style.color = checked ? '' : 'var(--accent-blue)';
-  modeLabel2.style.color = checked ? 'var(--accent-blue)' : '';
+    localStorage.setItem('junaid_mode', mode);
+    const checked = mode === 'together';
+    modeToggle.checked = checked;
+    modeLabel.style.color = checked ? '' : 'var(--accent-blue)';
+    modeLabel2.style.color = checked ? 'var(--accent-blue)' : '';
 }
 const savedMode = getMode();
 setMode(savedMode);
 modeToggle.addEventListener('change', ()=>{
-  const mode = modeToggle.checked ? 'together' : 'individual';
-  setMode(mode);
+    const mode = modeToggle.checked ? 'together' : 'individual';
+    setMode(mode);
 });
 
+// ===== HELPERS =====
 function show(m, type='info'){
-  const cls = type==='ok'?'ok':type==='err'?'err':'info';
-  msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
+    const cls = type==='ok'?'ok':type==='err'?'err':'info';
+    msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
 }
 function toggleCustom(){
-  customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
-  updCount();
+    customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
+    updCount();
 }
 function updCount(){
-  const bots = parseInt(botCount.value) || 0;
-  const names = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-  $('nameCount').textContent = names.length;
-  $('needCount').textContent = bots;
-  const st = $('nameStatus');
-  if(nameType.value !== 'custom'){ st.innerHTML = ''; return; }
-  st.innerHTML = names.length >= bots ? ' <span class="ok">✅ Enough</span>' : ` <span class="err">❌ Need ${bots - names.length} more</span>`;
+    const bots = parseInt(botCount.value) || 0;
+    const names = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+    $('nameCount').textContent = names.length;
+    $('needCount').textContent = bots;
+    const st = $('nameStatus');
+    if(nameType.value !== 'custom'){ st.innerHTML = ''; return; }
+    st.innerHTML = names.length >= bots ? ' <span class="ok">✅ Enough</span>' : ` <span class="err">❌ Need ${bots - names.length} more</span>`;
 }
 customNames.addEventListener('input', updCount);
 
-async function refresh(){
-  try{
-    const r = await fetch(API+'/status');
-    const d = await r.json();
-    const workers = d.workers || {};
-    const tasks = d.running_tasks || {};
-
-    let total=0, free=0;
-    Object.values(workers).forEach(w=>{
-      total += w.max_capacity || 0;
-      free += w.free_capacity || 0;
-    });
-    totalCap.textContent = total;
-    freeCap.textContent = free;
-    workerCount.textContent = Object.keys(workers).length;
-    taskCount.textContent = Object.keys(tasks).length + ' running';
-
-    const wKeys = Object.keys(workers);
-    if(!wKeys.length){
-      wlist.innerHTML = '<div class="empty">No workers connected</div>';
-    } else {
-      wlist.innerHTML = wKeys.map(id => {
-        const w = workers[id];
-        const free = w.free_capacity ?? 0;
-        const max = w.max_capacity ?? 0;
-        const pct = max > 0 ? Math.round((free/max)*100) : 0;
-        return `<div class="worker-item">
-          <span class="name">🟢 ${id}</span>
-          <span class="cap">${free}/${max} <span class="free">(${pct}%)</span></span>
-        </div>`;
-      }).join('');
-    }
-
-    const tKeys = Object.keys(tasks);
-    if(!tKeys.length){
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No active meetings</td></tr>';
-    } else {
-      tbody.innerHTML = tKeys.map(tid => {
-        const t = tasks[tid];
-        const meeting = t.meeting_code || 'N/A';
-        const bots = t.bot_count || 0;
-        const type = t.name_type || 'indian';
-        const mode = t.join_mode || 'individual';
-        const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
-        const totalDur = t.duration_minutes || 120;
-        const pct = totalDur > 0 ? ((totalDur - Math.max(0, remaining)) / totalDur * 100) : 0;
-        const pctClamped = Math.min(100, Math.max(0, pct));
-        const warn = remaining < 5 ? 'danger' : remaining < 15 ? 'warning' : '';
-        const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
-        const modeIcon = mode === 'together' ? '👥' : '🚶';
-        return `<tr>
-          <td style="font-family:monospace;font-size:12px;color:var(--text-secondary)">${tid}</td>
-          <td class="meeting-code">${meeting}</td>
-          <td>${bots}</td>
-          <td><span class="badge badge-${typeBadge}">${type}</span></td>
-          <td>${modeIcon}</td>
-          <td>
-            <div class="timer-bar">
-              <div class="progress">
-                <div class="fill" style="width:${pctClamped}%;background:${remaining < 5 ? 'var(--accent-red)' : remaining < 15 ? 'var(--accent-yellow)' : 'var(--accent-green)'}"></div>
-              </div>
-              <span class="time-text ${warn}">${remaining > 0 ? Math.ceil(remaining)+'m' : '0m'}</span>
-            </div>
-          </td>
-          <td style="text-align:center">
-            <button class="btn btn-danger btn-sm" onclick="killTask('${tid}')">✕ Kill</button>
-          </td>
-        </tr>`;
-      }).join('');
-    }
+// ===== LIVE CLOCK (updates every second) =====
+function updateClock(){
     liveTime.textContent = new Date().toLocaleTimeString();
-    statusText.textContent = 'Connected';
-    show('Status refreshed', 'ok');
-  } catch(e){
-    statusText.textContent = 'Offline';
-    show(e.message || 'Refresh failed', 'err');
-  }
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===== REFRESH =====
+async function refresh(){
+    try{
+        const r = await fetch(API+'/status');
+        const d = await r.json();
+        const workers = d.workers || {};
+        const tasks = d.running_tasks || {};
+
+        let total=0, free=0;
+        Object.values(workers).forEach(w=>{
+            total += w.max_capacity || 0;
+            free += w.free_capacity || 0;
+        });
+        const workerCountVal = Object.keys(workers).length;
+        const taskCountVal = Object.keys(tasks).length;
+        let runningBots = 0;
+        Object.values(tasks).forEach(t=>{ runningBots += t.bot_count || 0; });
+
+        // Update stats
+        totalCap.textContent = total;
+        freeCap.textContent = free;
+        workersN.textContent = workerCountVal;
+        tasksN.textContent = taskCountVal;
+        botsN.textContent = runningBots;
+        totalCapFooter.textContent = total;
+        freeCapFooter.textContent = free;
+        workerCount.textContent = workerCountVal;
+        taskCount.textContent = taskCountVal + ' running';
+
+        // Workers list
+        const wKeys = Object.keys(workers);
+        if(!wKeys.length){
+            wlist.innerHTML = '<div class="empty">No workers connected</div>';
+        } else {
+            wlist.innerHTML = wKeys.map(id => {
+                const w = workers[id];
+                const free = w.free_capacity ?? 0;
+                const max = w.max_capacity ?? 0;
+                const pct = max > 0 ? Math.round((free/max)*100) : 0;
+                return `<div class="worker-item">
+                    <span class="name">🟢 ${id}</span>
+                    <span class="cap">${free}/${max} <span class="free">(${pct}%)</span></span>
+                </div>`;
+            }).join('');
+        }
+
+        // Tasks table
+        const tKeys = Object.keys(tasks);
+        if(!tKeys.length){
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No active meetings</td></tr>';
+        } else {
+            tbody.innerHTML = tKeys.map(tid => {
+                const t = tasks[tid];
+                const meeting = t.meeting_code || 'N/A';
+                const bots = t.bot_count || 0;
+                const type = t.name_type || 'indian';
+                const mode = t.join_mode || 'individual';
+                const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
+                const totalDur = t.duration_minutes || 120;
+                const pct = totalDur > 0 ? ((totalDur - Math.max(0, remaining)) / totalDur * 100) : 0;
+                const pctClamped = Math.min(100, Math.max(0, pct));
+                const warn = remaining < 5 ? 'danger' : remaining < 15 ? 'warning' : '';
+                const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
+                const modeIcon = mode === 'together' ? '👥' : '🚶';
+                return `<tr>
+                    <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${tid}</td>
+                    <td class="meeting-code">${meeting}</td>
+                    <td>${bots}</td>
+                    <td><span class="badge badge-${typeBadge}">${type}</span></td>
+                    <td>${modeIcon}</td>
+                    <td>
+                        <div class="timer-bar">
+                            <div class="progress">
+                                <div class="fill" style="width:${pctClamped}%;background:${remaining < 5 ? 'var(--accent-red)' : remaining < 15 ? 'var(--accent-yellow)' : 'var(--accent-green)'}"></div>
+                            </div>
+                            <span class="time-text ${warn}">${remaining > 0 ? Math.ceil(remaining)+'m' : '0m'}</span>
+                        </div>
+                    </td>
+                    <td style="text-align:center">
+                        <button class="btn btn-danger btn-sm" onclick="killTask('${tid}')">✕ Kill</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        statusText.textContent = 'Connected';
+        show('Status refreshed', 'ok');
+    } catch(e){
+        statusText.textContent = 'Offline';
+        show(e.message || 'Refresh failed', 'err');
+    }
 }
 
+// ===== START BOTS =====
 async function startBots(){
-  const meeting = meetingId.value.trim().replace(/\s/g,'');
-  const pass = passcode.value.trim();
-  const bots = parseInt(botCount.value) || 10;
-  const dur = parseInt(duration.value) || 120;
-  const type = nameType.value;
-  const mode = getMode();
-  let custom = null;
-  if(type === 'custom'){
-    custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-    if(custom.length < bots) return show('Need '+(bots - custom.length)+' more names', 'err');
-  }
-  if(!meeting) return show('Meeting ID required', 'err');
-  try{
-    show('Starting...', 'info');
-    const r = await fetch(API+'/api/start-bots', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        meeting_code: meeting, passcode: pass, bot_count: bots,
-        duration_minutes: dur, name_type: type, custom_names: custom,
-        join_mode: mode
-      })
-    });
-    const d = await r.json();
-    if(r.ok){
-      show(d.message || 'Started successfully!', 'ok');
-      setTimeout(refresh, 1000);
-    } else {
-      show(d.detail || 'Failed to start', 'err');
+    const meeting = meetingId.value.trim().replace(/\s/g,'');
+    const pass = passcode.value.trim();
+    const bots = parseInt(botCount.value) || 10;
+    const dur = parseInt(duration.value) || 120;
+    const type = nameType.value;
+    const mode = getMode();
+    let custom = null;
+    if(type === 'custom'){
+        custom = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+        if(custom.length < bots) return show('Need '+(bots - custom.length)+' more names', 'err');
     }
-  } catch(e){ show(e.message, 'err'); }
+    if(!meeting) return show('Meeting ID required', 'err');
+    try{
+        show('Starting...', 'info');
+        const r = await fetch(API+'/api/start-bots', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                meeting_code: meeting, passcode: pass, bot_count: bots,
+                duration_minutes: dur, name_type: type, custom_names: custom,
+                join_mode: mode
+            })
+        });
+        const d = await r.json();
+        if(r.ok){
+            show(d.message || 'Started successfully!', 'ok');
+            setTimeout(refresh, 1000);
+        } else {
+            show(d.detail || 'Failed to start', 'err');
+        }
+    } catch(e){ show(e.message, 'err'); }
 }
 
+// ===== KILL TASK =====
 async function killTask(taskId){
-  if(!confirm(`Kill task ${taskId}?`)) return;
-  try{
-    const r = await fetch(API+'/api/terminate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({task_id: taskId})
-    });
-    const d = await r.json();
-    if(r.ok){
-      show(`✅ Kill sent for task ${taskId}`, 'ok');
-      setTimeout(refresh, 1000);
-    } else {
-      show(d.detail || 'Kill failed', 'err');
-    }
-  } catch(e){ show(e.message, 'err'); }
+    if(!confirm(`Kill task ${taskId}?`)) return;
+    try{
+        const r = await fetch(API+'/api/terminate', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({task_id: taskId})
+        });
+        const d = await r.json();
+        if(r.ok){
+            show(`✅ Kill sent for task ${taskId}`, 'ok');
+            setTimeout(refresh, 1000);
+        } else {
+            show(d.detail || 'Kill failed', 'err');
+        }
+    } catch(e){ show(e.message, 'err'); }
 }
 
+// ===== AUTO REFRESH (every 5 seconds) + INITIAL LOAD =====
 setInterval(refresh, 5000);
 refresh();
 </script>
