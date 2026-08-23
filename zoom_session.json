@@ -1,0 +1,195 @@
+{
+  "cookies": [
+    {
+      "name": "_GRECAPTCHA",
+      "value": "09AKhCRwh35OFwa69Bo486bQ0OK_KrqRteU1ObYHE2Xl5zfjANa1ZEQ3c--ME_PoAGeWkbj8ti_POu_QkkTRD2hi4",
+      "domain": "www.google.com",
+      "path": "/recaptcha",
+      "expires": 1803021925.073021,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_zm_mtk_guid",
+      "value": "4e2e2e231c614846bb5d66bc0e85feaa",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1822029917.807437,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_zm_csp_script_nonce",
+      "value": "lSnb6eswRu24NyrhWXIUrw",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_currency",
+      "value": "INR",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1787556326.398762,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_visitor_guid",
+      "value": "b73592241f674721adca948fa7ae0b5a",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1819005917.807495,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "wULrMv6t",
+      "value": "AyRsgi2gAQAA2MvTfkL49CHfh5vs4fs0OdGNTp-Oj4eqicugnAioyFebLjDaAWf4rWiucuKDwH8AAEB3AAAAAA|1|0|f853a533521c54e2acc6f4d94d7adb1635035176",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1822029918.553332,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_page_auth",
+      "value": "aw1_c_7J_mByLzR-e84jNEqPOmJA",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_zm_lang",
+      "value": "en-US",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1819005927.390644,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_zm_fingerprint",
+      "value": "5c5c3ea24c200eedc17122ed36fd8f27",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1819005919,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cf_clearance",
+      "value": "6yROEwZHP96WEMJ3lvcXPJw9nfrk4cGBpa5S53.k.00-1787469918-1.2.1.1-sPCdft7aVNNk9gewJRlZiWawy5RgNEaMwxWkKYLcf0Tr25MtrFbJvpBPFqYq6E0YRO9wuYbJib3PmGN.WJqyZnEqqYgKNLF49lIC2zquOubsYmqRcUF99pEDIlz3_LOiQe_289Vr2KaSERvqmkiXZhGNVt2yrpVdH5s8mWcd9EgKembXtLQRwMN4JLmQAy3wgskb.O_56KRDnF9_2FWxK8o8BpeajX4NMnlikwsezc0_Kdp3f4273duBeeAtd5Pp7auqTzK5PLtY7HKlecS0sIF8F2DBtelABgao5J7gCSx0R0t05urprdqjS23dzWkpW6d_dE3ebjc00DW.tIj8r_6sdbBbbyMYcfxyp3Uns0E",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1819005919.572332,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_zm_tracking_guid",
+      "value": "fa74637152aa482496b087834614e6b5",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1822029919.90013,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_cid2",
+      "value": "1%3BMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuV8yGHPpOYLVoEHO%2BrWoPMdhkRnmUjWyyhZPosxhwGePMPdT1kbVhLwOp9txWSWat1TapBXpuHJ0IOEhRpRWcg%3D%3D%3BdVUxWnJaZHcxdTdJ%3BMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEcI9kS1%2Bm0dh8%2Bk5TMvm6i8sQ20uV9xKYGzmG8I5Q64Kv7oJfyMkeUPdKSTAUwiCbjpC%2FLLXhdsRrx9pHsCwNg%3D%3D%3BXFHW3yTLtKZOps9GoZL%2FTwHjHOJ6Vo6QB0mAPMEDS93k8UoMweeM2yWfPeACIxAjDOn05Z3r0mPzF0M4EPsDdt0qK9EiDCoqdfXGkNvuJppAPHLxl7FxwFy8w91oirotpcfjzCjNzO4%3D",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1822029925.601583,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_ssid",
+      "value": "aw1_c_uE3a9Lw0Smim9DpDeVviUA",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "zm_cluster",
+      "value": "aw1",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "zm_aid",
+      "value": "9tf3CB7cR4mV8ptrr1i1jQ",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "zm_haid",
+      "value": "738",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_zm_login_acctype",
+      "value": "7",
+      "domain": ".zoom.us",
+      "path": "/",
+      "expires": 1822029925.601735,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cred",
+      "value": "3E5E196F38E16CBB4D84C13866535625",
+      "domain": "zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cred",
+      "value": "CFE28CD2702A54121180A1F0F69282DE",
+      "domain": "app.zoom.us",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
