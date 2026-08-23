@@ -1,17 +1,34 @@
 # ============================================
-# ZOOM BOT CENTRAL – RECONNECT SUPPORT
+# ZOOM BOT CENTRAL – RECONNECT + CUMULATIVE + IST
 # ============================================
 import os
 import uuid
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import socketio
+
+# IST timezone
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def now_ist():
+    return datetime.now(IST)
+
+def ist_str(dt=None):
+    if dt is None:
+        dt = now_ist()
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except:
+            return dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(IST).strftime("%H:%M:%S")
 
 sio = socketio.AsyncServer(
     async_mode="asgi",
@@ -28,11 +45,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 workers = {}
-running_tasks = {}
+running_tasks = {}          # task_id -> task info
+meeting_groups = {}         # meeting_code -> list of task_ids (for cumulative)
 
 class StartBotRequest(BaseModel):
     meeting_code: str
@@ -53,28 +70,23 @@ async def connect(sid, environ):
 
 @sio.event
 async def disconnect(sid):
-    # Mark worker offline but keep tasks and capacity
     for wid, info in list(workers.items()):
         if info.get("sid") == sid:
             workers[wid]["sid"] = None
-            workers[wid]["last_seen"] = datetime.now().isoformat()
-            print(f"[SIO] Worker {wid} went offline (tasks preserved)")
+            workers[wid]["last_seen"] = now_ist().isoformat()
+            print(f"[SIO] Worker {wid} offline (tasks preserved)")
             break
-    else:
-        print(f"[SIO] Disconnect from unknown sid: {sid}")
 
 @sio.event
 async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
-    now = datetime.now().isoformat()
-
+    now = now_ist().isoformat()
     if wid in workers:
-        # Reconnect – update sid, keep free_capacity and tasks
         workers[wid]["sid"] = sid
-        workers[wid]["max_capacity"] = max_cap  # in case changed
+        workers[wid]["max_capacity"] = max_cap
         workers[wid]["last_seen"] = now
-        print(f"[SIO] Worker {wid} reconnected, free_capacity unchanged: {workers[wid]['free_capacity']}")
+        print(f"[SIO] Worker {wid} reconnected | free={workers[wid]['free_capacity']}")
     else:
         workers[wid] = {
             "sid": sid,
@@ -83,7 +95,6 @@ async def register_worker(sid, data):
             "last_seen": now
         }
         print(f"[SIO] New worker {wid} | capacity={max_cap}")
-
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
 
 @sio.event
@@ -91,7 +102,7 @@ async def update_capacity(sid, data):
     wid = data.get("worker_id")
     if wid in workers:
         workers[wid]["free_capacity"] = max(0, int(data.get("free_capacity", 0)))
-        workers[wid]["last_seen"] = datetime.now().isoformat()
+        workers[wid]["last_seen"] = now_ist().isoformat()
 
 @sio.event
 async def task_completed(sid, data):
@@ -103,29 +114,62 @@ async def task_completed(sid, data):
                 workers[wid]["max_capacity"],
                 workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
             )
+        meeting = running_tasks[tid].get("meeting_code")
+        if meeting and meeting in meeting_groups and tid in meeting_groups[meeting]:
+            meeting_groups[meeting].remove(tid)
+            if not meeting_groups[meeting]:
+                del meeting_groups[meeting]
         del running_tasks[tid]
         print(f"[SIO] Task completed: {tid}")
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "workers": len(workers)}
+    return {"ok": True, "workers": len(workers), "time": now_ist().isoformat()}
 
 @app.get("/status")
 @app.get("/api/status")
 async def status():
     total_free = sum(w.get("free_capacity", 0) for w in workers.values())
-    now = datetime.now()
-    for tid, task in running_tasks.items():
+    now = now_ist()
+
+    # Build cumulative view by meeting
+    meetings = {}
+    for tid, task in list(running_tasks.items()):
+        meeting = task.get("meeting_code", "unknown")
+        if meeting not in meetings:
+            meetings[meeting] = {
+                "meeting_code": meeting,
+                "total_bots": 0,
+                "tasks": [],
+                "name_type": task.get("name_type", "indian"),
+                "started_at": task.get("started_at"),
+                "duration_minutes": task.get("duration_minutes", 120),
+                "join_mode": task.get("join_mode", "individual")
+            }
+        meetings[meeting]["total_bots"] += task.get("bot_count", 0)
+        meetings[meeting]["tasks"].append(tid)
+
+        # Update remaining time
         if "started_at" in task:
-            started = datetime.fromisoformat(task["started_at"])
-            elapsed = (now - started).total_seconds() / 60
-            task["elapsed_minutes"] = round(elapsed, 1)
-            task["remaining_minutes"] = max(0, round(task.get("duration_minutes", 120) - elapsed, 1))
-            if task["remaining_minutes"] <= 0:
-                task["remaining_minutes"] = 0
+            try:
+                started = datetime.fromisoformat(task["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=IST)
+                elapsed = (now - started).total_seconds() / 60
+                task["elapsed_minutes"] = round(elapsed, 1)
+                task["remaining_minutes"] = max(0, round(task.get("duration_minutes", 120) - elapsed, 1))
+            except:
+                task["remaining_minutes"] = task.get("duration_minutes", 120)
+
+        # Latest start time for the group
+        if task.get("started_at") and (meetings[meeting]["started_at"] is None or task["started_at"] > meetings[meeting]["started_at"]):
+            meetings[meeting]["started_at"] = task["started_at"]
+            meetings[meeting]["duration_minutes"] = task.get("duration_minutes", 120)
+
     return {
         "workers": workers,
         "running_tasks": running_tasks,
+        "meetings": meetings,               # cumulative view
         "total_free_capacity": total_free,
         "timestamp": now.isoformat()
     }
@@ -134,12 +178,14 @@ async def status():
 async def start_bots(req: StartBotRequest):
     if req.bot_count < 1:
         raise HTTPException(400, "bot_count must be >= 1")
+
     meeting = req.meeting_code.strip().replace(" ", "")
     if not meeting:
         raise HTTPException(400, "meeting_code required")
 
     remaining = req.bot_count
     assigned = []
+
     sorted_workers = sorted(
         workers.items(),
         key=lambda x: x[1].get("free_capacity", 0),
@@ -150,10 +196,12 @@ async def start_bots(req: StartBotRequest):
         if remaining <= 0:
             break
         free = int(info.get("free_capacity", 0))
-        if free <= 0:
+        if free <= 0 or not info.get("sid"):
             continue
+
         give = min(free, remaining)
         task_id = str(uuid.uuid4())[:8]
+
         payload = {
             "task_id": task_id,
             "meeting_code": meeting,
@@ -164,13 +212,9 @@ async def start_bots(req: StartBotRequest):
             "custom_names": req.custom_names,
             "join_mode": req.join_mode or "individual"
         }
-        # Only send if worker is connected
-        if info.get("sid"):
-            await sio.emit("new_task", payload, to=info["sid"])
-        else:
-            # Worker offline – cannot assign, skip
-            print(f"⚠️ Worker {wid} is offline, cannot assign task.")
-            continue
+
+        await sio.emit("new_task", payload, to=info["sid"])
+
         running_tasks[task_id] = {
             "task_id": task_id,
             "meeting_code": meeting,
@@ -178,21 +222,27 @@ async def start_bots(req: StartBotRequest):
             "worker_id": wid,
             "name_type": payload["name_type"],
             "duration_minutes": req.duration_minutes,
-            "started_at": datetime.now().isoformat(),
+            "started_at": now_ist().isoformat(),
             "remaining_minutes": req.duration_minutes,
             "join_mode": req.join_mode or "individual"
         }
+
+        # Track in meeting group
+        if meeting not in meeting_groups:
+            meeting_groups[meeting] = []
+        meeting_groups[meeting].append(task_id)
+
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
         remaining -= give
-        print(f"[API] Task {task_id} → {wid} ({give} bots) mode={req.join_mode}")
+        print(f"[API] Task {task_id} → {wid} ({give} bots) | Meeting: {meeting}")
 
     if not assigned:
-        raise HTTPException(503, "No free capacity or no connected workers. Start worker first.")
+        raise HTTPException(503, "No free capacity or no connected workers.")
 
     return {
         "success": True,
-        "message": f"Started {req.bot_count - remaining} bots",
+        "message": f"Started {req.bot_count - remaining} bots for {meeting}",
         "assigned": assigned,
         "remaining_unassigned": remaining
     }
@@ -206,22 +256,26 @@ async def terminate(req: Optional[TerminateRequest] = None):
             raise HTTPException(404, "Task not found")
         meeting = running_tasks[task_id].get("meeting_code")
         wid = running_tasks[task_id].get("worker_id")
-        # Send terminate to worker if connected
         if wid in workers and workers[wid].get("sid"):
             await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
-        # Restore capacity
         if wid and wid in workers:
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
                 workers[wid].get("free_capacity", 0) + running_tasks[task_id].get("bot_count", 0)
             )
+        if meeting and meeting in meeting_groups and task_id in meeting_groups[meeting]:
+            meeting_groups[meeting].remove(task_id)
+            if not meeting_groups[meeting]:
+                del meeting_groups[meeting]
         del running_tasks[task_id]
         print(f"[API] Terminate task {task_id}")
         return {"success": True, "message": f"Task {task_id} terminated"}
 
     elif req and req.meeting_code:
-        meeting = req.meeting_code
+        meeting = req.meeting_code.strip().replace(" ", "")
         to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
+        if not to_kill:
+            raise HTTPException(404, f"No active tasks for meeting {meeting}")
         for tid in to_kill:
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
@@ -232,8 +286,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
                     workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
                 )
             del running_tasks[tid]
-        print(f"[API] Terminate meeting {meeting}")
-        return {"success": True, "message": f"Meeting {meeting} terminated"}
+        if meeting in meeting_groups:
+            del meeting_groups[meeting]
+        print(f"[API] Terminate meeting {meeting} ({len(to_kill)} tasks)")
+        return {"success": True, "message": f"Meeting {meeting} terminated ({len(to_kill)} tasks)"}
 
     else:
         # Kill ALL
@@ -247,105 +303,101 @@ async def terminate(req: Optional[TerminateRequest] = None):
                     workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
                 )
         running_tasks.clear()
+        meeting_groups.clear()
         print(f"[API] Terminate ALL")
         return {"success": True, "message": "All tasks terminated"}
 
 # ============================================
-# DASHBOARD – OLD‑SCHOOL PANEL
+# DASHBOARD – Professional + IST + Search
 # ============================================
-# (Use the same HTML as before – unchanged)
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
-<title>Zoom Panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Zoom Control Panel</title>
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
-        background: #0f1a2b;
-        font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-        color: #e0e8f0;
-        padding: 12px;
+        background: #0b1420;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        color: #d8e4f0;
+        padding: 16px;
         min-height: 100vh;
     }
-    .container { max-width: 1600px; margin:0 auto; }
-
+    .container { max-width: 1400px; margin:0 auto; }
     .header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: #142433;
-        border-radius: 6px;
-        padding: 8px 16px;
-        margin-bottom: 12px;
-        border-bottom: 2px solid #2a4a6a;
+        background: linear-gradient(90deg, #122033, #0f1c2e);
+        border-radius: 10px;
+        padding: 14px 20px;
+        margin-bottom: 18px;
+        border: 1px solid #1e3a5f;
     }
     .header h1 {
-        font-size: 20px;
-        font-weight: 600;
-        color: #8ab4f8;
-        letter-spacing: 0.5px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #7eb6ff;
+        letter-spacing: 0.3px;
     }
-    .header h1 span { color: #5c8fc7; }
+    .header h1 span { color: #4a9eff; }
     .header-right {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 18px;
         font-size: 14px;
     }
-    .header-right .usage {
-        background: #0a1520;
-        padding: 4px 12px;
-        border-radius: 4px;
-        border: 1px solid #2a4a6a;
+    .usage {
+        background: #0a1525;
+        padding: 5px 14px;
+        border-radius: 6px;
+        border: 1px solid #1e3a5f;
         color: #8ab4f8;
     }
-    .header-right .usage strong { color: #ffd966; }
-
+    .usage strong { color: #ffd166; }
     .main-grid {
         display: grid;
-        grid-template-columns: 320px 1fr;
-        gap: 16px;
+        grid-template-columns: 340px 1fr;
+        gap: 18px;
     }
-    @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
-
-    .left-panel {
-        background: #142433;
-        border-radius: 6px;
-        padding: 14px;
-        border: 1px solid #1f3a55;
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+    .left-panel, .right-panel {
+        background: #122033;
+        border-radius: 10px;
+        padding: 16px;
+        border: 1px solid #1e3a5f;
     }
-    .left-panel .section-title {
-        font-size: 13px;
+    .section-title {
+        font-size: 14px;
         font-weight: 600;
-        color: #8ab4f8;
-        border-bottom: 1px solid #1f3a55;
-        padding-bottom: 6px;
-        margin-bottom: 12px;
+        color: #7eb6ff;
+        border-bottom: 1px solid #1e3a5f;
+        padding-bottom: 8px;
+        margin-bottom: 14px;
     }
-    .form-group { margin-bottom: 10px; }
+    .form-group { margin-bottom: 12px; }
     .form-group label {
         display: block;
         font-size: 12px;
         color: #89a9c9;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
     }
     .form-group input, .form-group select, .form-group textarea {
         width: 100%;
-        padding: 6px 8px;
-        background: #0a1520;
-        border: 1px solid #1f3a55;
-        border-radius: 4px;
+        padding: 8px 10px;
+        background: #0a1525;
+        border: 1px solid #1e3a5f;
+        border-radius: 6px;
         color: #e0e8f0;
         font-size: 13px;
         outline: none;
     }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-        border-color: #4a8bc2;
-        box-shadow: 0 0 0 2px rgba(74,139,194,0.2);
+        border-color: #4a9eff;
+        box-shadow: 0 0 0 3px rgba(74,158,255,0.15);
     }
-    .form-group textarea { resize: vertical; font-size: 12px; }
     .form-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -354,49 +406,50 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .btn-row {
         display: flex;
         gap: 10px;
-        margin-top: 6px;
+        margin-top: 8px;
     }
     .btn {
-        padding: 6px 18px;
+        padding: 8px 18px;
         border: none;
-        border-radius: 4px;
+        border-radius: 6px;
         font-weight: 600;
         font-size: 13px;
         cursor: pointer;
         transition: all 0.2s;
     }
-    .btn-primary { background: #2a6a9a; color: white; }
-    .btn-primary:hover { background: #3a7aaa; }
-    .btn-danger { background: #8a3a3a; color: white; }
-    .btn-danger:hover { background: #aa4a4a; }
+    .btn-primary { background: #2a7acc; color: white; }
+    .btn-primary:hover { background: #3a8adc; }
+    .btn-danger { background: #c44; color: white; }
+    .btn-danger:hover { background: #d55; }
     .btn-outline { background: transparent; border: 1px solid #2a4a6a; color: #8ab4f8; }
     .btn-outline:hover { background: #1a2a3a; }
-    .btn-sm { padding: 2px 10px; font-size: 11px; }
-
-    .right-panel {
-        background: #142433;
-        border-radius: 6px;
-        padding: 12px;
-        border: 1px solid #1f3a55;
-        overflow-x: auto;
-    }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
     .right-panel .table-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 10px;
     }
     .right-panel .table-header h2 {
         font-size: 16px;
         font-weight: 600;
-        color: #8ab4f8;
+        color: #7eb6ff;
     }
-    .right-panel .table-header .badge {
-        background: #1a2a3a;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        color: #89a9c9;
+    .search-box {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .search-box input {
+        padding: 6px 10px;
+        background: #0a1525;
+        border: 1px solid #1e3a5f;
+        border-radius: 6px;
+        color: #e0e8f0;
+        font-size: 13px;
+        width: 160px;
     }
     table {
         width: 100%;
@@ -405,103 +458,91 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     }
     th {
         text-align: left;
-        padding: 8px 6px;
+        padding: 10px 8px;
         color: #89a9c9;
         font-weight: 500;
-        border-bottom: 1px solid #1f3a55;
-        font-size: 12px;
+        border-bottom: 1px solid #1e3a5f;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.4px;
     }
     td {
-        padding: 8px 6px;
+        padding: 10px 8px;
         border-bottom: 1px solid #0f1a2b;
         vertical-align: middle;
     }
     tr:hover td { background: #1a2a3a; }
     .meeting-id {
         font-weight: 600;
-        color: #8ab4f8;
-        cursor: pointer;
+        color: #7eb6ff;
     }
-    .meeting-id:hover { text-decoration: underline; }
     .badge-type {
         display: inline-block;
-        padding: 0 8px;
+        padding: 2px 8px;
         border-radius: 12px;
         font-size: 10px;
         font-weight: 500;
-        line-height: 18px;
         border: 1px solid;
     }
-    .badge-indian { border-color: #4a8bc2; color: #4a8bc2; }
-    .badge-english { border-color: #6a8a6a; color: #6a8a6a; }
+    .badge-indian { border-color: #4a9eff; color: #4a9eff; }
+    .badge-english { border-color: #6aaa6a; color: #6aaa6a; }
     .badge-custom { border-color: #c29a4a; color: #c29a4a; }
-    .action-btns { display: flex; gap: 4px; flex-wrap: wrap; }
-    .action-btns .btn { font-size: 11px; padding: 2px 8px; }
-
     .log {
-        margin-top: 10px;
-        padding: 6px 10px;
-        background: #0a1520;
-        border: 1px solid #1f3a55;
-        border-radius: 4px;
+        margin-top: 12px;
+        padding: 8px 12px;
+        background: #0a1525;
+        border: 1px solid #1e3a5f;
+        border-radius: 6px;
         font-size: 12px;
         color: #89a9c9;
-        font-family: monospace;
-        min-height: 28px;
+        font-family: 'Cascadia Code', 'Fira Code', monospace;
+        min-height: 32px;
     }
     .log .ok { color: #6aaa6a; }
-    .log .err { color: #aa6a6a; }
-    .log .info { color: #4a8bc2; }
-
+    .log .err { color: #e66; }
+    .log .info { color: #4a9eff; }
     #customBox {
         display: none;
-        margin-top: 6px;
-        padding: 8px;
-        background: #0a1520;
-        border: 1px solid #1f3a55;
-        border-radius: 4px;
+        margin-top: 8px;
+        padding: 10px;
+        background: #0a1525;
+        border: 1px solid #1e3a5f;
+        border-radius: 6px;
     }
-    #customBox .name-status { font-size: 11px; color: #89a9c9; margin-top: 4px; }
-    #customBox .name-status .ok { color: #6aaa6a; }
-    #customBox .name-status .err { color: #aa6a6a; }
-
-    @media (max-width: 600px) {
-        .header h1 { font-size: 16px; }
-        .header-right { font-size: 12px; gap: 8px; }
-        .form-row { grid-template-columns: 1fr; }
-    }
+    .name-status { font-size: 11px; color: #89a9c9; margin-top: 6px; }
+    .name-status .ok { color: #6aaa6a; }
+    .name-status .err { color: #e66; }
 </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>🔵 ZOOM <span>Panel</span></h1>
+        <h1>🔵 ZOOM <span>Control Panel</span></h1>
         <div class="header-right">
-            <span class="usage">Usage: <strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></span>
-            <span id="liveTime" style="color:#89a9c9; font-size:13px;"></span>
-            <button class="btn btn-outline btn-sm" onclick="refresh()">⟳</button>
+            <span class="usage">Usage: <strong id="totalCap">0</strong> / <strong id="totalCapMax">0</strong></span>
+            <span id="liveTime" style="color:#89a9c9;"></span>
+            <button class="btn btn-outline btn-sm" onclick="refresh()">⟳ Refresh</button>
         </div>
     </div>
+
     <div class="main-grid">
         <div class="left-panel">
-            <div class="section-title">Add custom names</div>
+            <div class="section-title">Launch Bots</div>
             <div class="form-group">
-                <label>Meeting ID:</label>
+                <label>Meeting ID</label>
                 <input id="meetingId" placeholder="98695209590" />
             </div>
             <div class="form-group">
-                <label>Meeting Password:</label>
-                <input id="passcode" placeholder="optional" />
+                <label>Passcode (optional)</label>
+                <input id="passcode" placeholder="Leave empty if none" />
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Members (1-100):</label>
-                    <input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()" />
+                    <label>Bots (1-100)</label>
+                    <input type="number" id="botCount" value="10" min="1" max="200" oninput="updCount()" />
                 </div>
                 <div class="form-group">
-                    <label>Name:</label>
+                    <label>Name Type</label>
                     <select id="nameType" onchange="toggleCustom()">
                         <option value="indian">🇮🇳 Indian</option>
                         <option value="english">🇺🇸 English</option>
@@ -512,37 +553,42 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <div id="customBox">
                 <label style="font-size:11px;color:#89a9c9;">Custom names (one per line)</label>
                 <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
-                <div class="name-status">Names: <strong id="nameCount">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount">10</strong> <span id="nameStatus"></span></div>
+                <div class="name-status">Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">10</strong> <span id="nameStatus"></span></div>
             </div>
             <div class="form-group">
-                <label>Timeout (in seconds):</label>
-                <input type="number" id="duration" value="7200" min="60" />
+                <label>Duration (minutes)</label>
+                <input type="number" id="duration" value="120" min="1" />
             </div>
             <div class="btn-row">
                 <button class="btn btn-primary" onclick="startBots()">▶ Start</button>
                 <button class="btn btn-danger" onclick="killAll()">⏹ Kill All</button>
             </div>
-            <div id="msg" class="log">Ready</div>
+            <div id="msg" class="log">Ready • All times in IST</div>
         </div>
+
         <div class="right-panel">
             <div class="table-header">
-                <h2>All Meetings</h2>
-                <span class="badge" id="taskCount">0 active</span>
+                <h2>Active Meetings</h2>
+                <div class="search-box">
+                    <input id="searchMeeting" placeholder="Search Meeting ID" />
+                    <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
+                </div>
+                <span class="badge" id="taskCount" style="background:#0a1525;padding:4px 12px;border-radius:20px;font-size:12px;color:#89a9c9;">0 active</span>
             </div>
             <table>
                 <thead>
                     <tr>
                         <th>#</th>
                         <th>Meeting ID</th>
-                        <th>Qty</th>
-                        <th>Start</th>
-                        <th>Time out</th>
-                        <th>Nm Type</th>
+                        <th>Total Bots</th>
+                        <th>Started (IST)</th>
+                        <th>Remaining</th>
+                        <th>Names</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="tbody">
-                    <tr><td colspan="7" style="text-align:center;color:#89a9c9;">No active meetings</td></tr>
+                    <tr><td colspan="7" style="text-align:center;color:#89a9c9;padding:20px;">No active meetings</td></tr>
                 </tbody>
             </table>
         </div>
@@ -552,20 +598,17 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <script>
 const API = location.origin;
 const $ = id => document.getElementById(id);
-const meetingId = $('meetingId'), passcode = $('passcode'), botCount = $('botCount');
-const duration = $('duration'), nameType = $('nameType'), customNames = $('customNames');
-const customBox = $('customBox'), msg = $('msg'), tbody = $('tbody');
-const totalCap = $('totalCap'), totalCapMax = $('totalCapMax');
-const taskCount = $('taskCount'), liveTime = $('liveTime');
 
 function show(m, type='info'){
     const cls = type==='ok'?'ok':type==='err'?'err':'info';
-    msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString()}] ${m}</span>`;
+    msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`;
 }
+
 function toggleCustom(){
     customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
     updCount();
 }
+
 function updCount(){
     const bots = parseInt(botCount.value) || 0;
     const names = customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
@@ -578,7 +621,7 @@ function updCount(){
 customNames.addEventListener('input', updCount);
 
 function updateClock(){
-    liveTime.textContent = new Date().toLocaleTimeString();
+    liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'}) + ' IST';
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -588,7 +631,7 @@ async function refresh(){
         const r = await fetch(API+'/status');
         const d = await r.json();
         const workers = d.workers || {};
-        const tasks = d.running_tasks || {};
+        const meetings = d.meetings || {};
 
         let total=0, free=0;
         Object.values(workers).forEach(w=>{
@@ -597,34 +640,28 @@ async function refresh(){
         });
         totalCap.textContent = total - free;
         totalCapMax.textContent = total;
-        taskCount.textContent = Object.keys(tasks).length + ' active';
+        taskCount.textContent = Object.keys(meetings).length + ' meetings';
 
-        if(!Object.keys(tasks).length){
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#89a9c9;">No active meetings</td></tr>';
+        if(!Object.keys(meetings).length){
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#89a9c9;padding:20px;">No active meetings</td></tr>';
         } else {
             let idx = 0;
-            tbody.innerHTML = Object.entries(tasks).map(([tid,t])=>{
+            tbody.innerHTML = Object.entries(meetings).map(([meeting, m])=>{
                 idx++;
-                const meeting = t.meeting_code || 'N/A';
-                const bots = t.bot_count || 0;
-                const type = t.name_type || 'indian';
-                const remaining = t.remaining_minutes !== undefined ? t.remaining_minutes : t.duration_minutes || 120;
-                const startTime = t.started_at ? new Date(t.started_at).toLocaleTimeString() : '-';
-                const totalDur = t.duration_minutes || 120;
-                const timeOut = Math.ceil(remaining) + ' min';
+                const bots = m.total_bots || 0;
+                const type = m.name_type || 'indian';
+                const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+                const remaining = m.duration_minutes || 120;
                 const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
                 return `<tr>
                     <td>${idx}</td>
-                    <td class="meeting-id" onclick="alert('Meeting: ${meeting}')">${meeting}</td>
-                    <td>${bots}</td>
+                    <td class="meeting-id">${meeting}</td>
+                    <td><strong>${bots}</strong></td>
                     <td>${startTime}</td>
-                    <td>${timeOut}</td>
+                    <td>${remaining} min</td>
                     <td><span class="badge-type badge-${typeBadge}">${type}</span></td>
                     <td>
-                        <div class="action-btns">
-                            <button class="btn btn-outline btn-sm" onclick="refillTask('${tid}')">Refill</button>
-                            <button class="btn btn-danger btn-sm" onclick="killTask('${tid}')">Kill</button>
-                        </div>
+                        <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -639,7 +676,7 @@ async function startBots(){
     const meeting = meetingId.value.trim().replace(/\s/g,'');
     const pass = passcode.value.trim();
     const bots = parseInt(botCount.value) || 10;
-    const dur = parseInt(duration.value) / 60 || 120;
+    const dur = parseInt(duration.value) || 120;
     const type = nameType.value;
     let custom = null;
     if(type === 'custom'){
@@ -647,49 +684,56 @@ async function startBots(){
         if(custom.length < bots) return show('Need '+(bots - custom.length)+' more names', 'err');
     }
     if(!meeting) return show('Meeting ID required', 'err');
+
     try{
-        show('Starting...', 'info');
+        show('Starting bots...', 'info');
         const r = await fetch(API+'/api/start-bots', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
-                meeting_code: meeting, passcode: pass, bot_count: bots,
-                duration_minutes: Math.ceil(dur), name_type: type, custom_names: custom,
+                meeting_code: meeting,
+                passcode: pass,
+                bot_count: bots,
+                duration_minutes: dur,
+                name_type: type,
+                custom_names: custom,
                 join_mode: 'individual'
             })
         });
         const d = await r.json();
         if(r.ok){
             show(d.message || 'Started!', 'ok');
-            setTimeout(refresh, 1000);
+            setTimeout(refresh, 800);
         } else {
             show(d.detail || 'Failed', 'err');
         }
     } catch(e){ show(e.message, 'err'); }
 }
 
-async function killTask(taskId){
-    if(!confirm(`Kill task ${taskId}?`)) return;
+async function killMeeting(meeting){
+    if(!confirm(`Kill all bots for meeting ${meeting}?`)) return;
     try{
         const r = await fetch(API+'/api/terminate', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({task_id: taskId})
+            body: JSON.stringify({meeting_code: meeting})
         });
         const d = await r.json();
         if(r.ok){
-            show(`Kill sent`, 'ok');
-            setTimeout(refresh, 1000);
+            show(d.message || 'Killed', 'ok');
+            setTimeout(refresh, 800);
         } else {
             show(d.detail || 'Kill failed', 'err');
         }
     } catch(e){ show(e.message, 'err'); }
 }
 
-async function refillTask(taskId){
-    alert('Refill feature: add more bots to existing task (not implemented)');
+async function killBySearch(){
+    const meeting = $('searchMeeting').value.trim().replace(/\s/g,'');
+    if(!meeting) return show('Enter Meeting ID to kill', 'err');
+    await killMeeting(meeting);
 }
 
 async function killAll(){
-    if(!confirm('Kill ALL tasks?')) return;
+    if(!confirm('Kill ALL meetings and bots?')) return;
     try{
         const r = await fetch(API+'/api/terminate', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -698,7 +742,7 @@ async function killAll(){
         const d = await r.json();
         if(r.ok){
             show('All tasks killed', 'ok');
-            setTimeout(refresh, 1000);
+            setTimeout(refresh, 800);
         } else {
             show(d.detail || 'Kill all failed', 'err');
         }
