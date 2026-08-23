@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – RECONNECT + CUMULATIVE + IST
+# ZOOM BOT CENTRAL – FULL UPDATED (IST + Session + Cumulative)
 # ============================================
 import os
 import uuid
@@ -8,11 +8,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import socketio
 
-# IST timezone
+# ========== IST ==========
 IST = timezone(timedelta(hours=5, minutes=30))
 
 def now_ist():
@@ -30,6 +30,7 @@ def ist_str(dt=None):
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(IST).strftime("%H:%M:%S")
 
+# ========== SOCKET.IO ==========
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins="*",
@@ -48,9 +49,10 @@ app.add_middleware(
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 workers = {}
-running_tasks = {}          # task_id -> task info
-meeting_groups = {}         # meeting_code -> list of task_ids (for cumulative)
+running_tasks = {}          # task_id -> info
+meeting_groups = {}         # meeting_code -> [task_ids]
 
+# ========== MODELS ==========
 class StartBotRequest(BaseModel):
     meeting_code: str
     passcode: str = ""
@@ -64,6 +66,7 @@ class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
+# ========== SOCKET EVENTS ==========
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}")
@@ -82,6 +85,7 @@ async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
     now = now_ist().isoformat()
+
     if wid in workers:
         workers[wid]["sid"] = sid
         workers[wid]["max_capacity"] = max_cap
@@ -95,6 +99,7 @@ async def register_worker(sid, data):
             "last_seen": now
         }
         print(f"[SIO] New worker {wid} | capacity={max_cap}")
+
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
 
 @sio.event
@@ -122,9 +127,17 @@ async def task_completed(sid, data):
         del running_tasks[tid]
         print(f"[SIO] Task completed: {tid}")
 
+# ========== API ROUTES ==========
 @app.get("/health")
 async def health():
     return {"ok": True, "workers": len(workers), "time": now_ist().isoformat()}
+
+@app.get("/session")
+async def get_session():
+    """Marimo Worker isse session fetch karega"""
+    if not os.path.exists("zoom_session.json"):
+        raise HTTPException(status_code=404, detail="Session file not found")
+    return FileResponse("zoom_session.json", media_type="application/json")
 
 @app.get("/status")
 @app.get("/api/status")
@@ -132,7 +145,6 @@ async def status():
     total_free = sum(w.get("free_capacity", 0) for w in workers.values())
     now = now_ist()
 
-    # Build cumulative view by meeting
     meetings = {}
     for tid, task in list(running_tasks.items()):
         meeting = task.get("meeting_code", "unknown")
@@ -149,7 +161,6 @@ async def status():
         meetings[meeting]["total_bots"] += task.get("bot_count", 0)
         meetings[meeting]["tasks"].append(tid)
 
-        # Update remaining time
         if "started_at" in task:
             try:
                 started = datetime.fromisoformat(task["started_at"])
@@ -161,7 +172,6 @@ async def status():
             except:
                 task["remaining_minutes"] = task.get("duration_minutes", 120)
 
-        # Latest start time for the group
         if task.get("started_at") and (meetings[meeting]["started_at"] is None or task["started_at"] > meetings[meeting]["started_at"]):
             meetings[meeting]["started_at"] = task["started_at"]
             meetings[meeting]["duration_minutes"] = task.get("duration_minutes", 120)
@@ -169,7 +179,7 @@ async def status():
     return {
         "workers": workers,
         "running_tasks": running_tasks,
-        "meetings": meetings,               # cumulative view
+        "meetings": meetings,
         "total_free_capacity": total_free,
         "timestamp": now.isoformat()
     }
@@ -227,7 +237,6 @@ async def start_bots(req: StartBotRequest):
             "join_mode": req.join_mode or "individual"
         }
 
-        # Track in meeting group
         if meeting not in meeting_groups:
             meeting_groups[meeting] = []
         meeting_groups[meeting].append(task_id)
@@ -256,17 +265,21 @@ async def terminate(req: Optional[TerminateRequest] = None):
             raise HTTPException(404, "Task not found")
         meeting = running_tasks[task_id].get("meeting_code")
         wid = running_tasks[task_id].get("worker_id")
+
         if wid in workers and workers[wid].get("sid"):
             await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
+
         if wid and wid in workers:
             workers[wid]["free_capacity"] = min(
                 workers[wid]["max_capacity"],
                 workers[wid].get("free_capacity", 0) + running_tasks[task_id].get("bot_count", 0)
             )
+
         if meeting and meeting in meeting_groups and task_id in meeting_groups[meeting]:
             meeting_groups[meeting].remove(task_id)
             if not meeting_groups[meeting]:
                 del meeting_groups[meeting]
+
         del running_tasks[task_id]
         print(f"[API] Terminate task {task_id}")
         return {"success": True, "message": f"Task {task_id} terminated"}
@@ -276,6 +289,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
         if not to_kill:
             raise HTTPException(404, f"No active tasks for meeting {meeting}")
+
         for tid in to_kill:
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
@@ -286,8 +300,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
                     workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
                 )
             del running_tasks[tid]
+
         if meeting in meeting_groups:
             del meeting_groups[meeting]
+
         print(f"[API] Terminate meeting {meeting} ({len(to_kill)} tasks)")
         return {"success": True, "message": f"Meeting {meeting} terminated ({len(to_kill)} tasks)"}
 
@@ -304,12 +320,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
                 )
         running_tasks.clear()
         meeting_groups.clear()
-        print(f"[API] Terminate ALL")
+        print("[API] Terminate ALL")
         return {"success": True, "message": "All tasks terminated"}
 
-# ============================================
-# DASHBOARD – Professional + IST + Search
-# ============================================
+# ========== DASHBOARD ==========
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -573,7 +587,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                     <input id="searchMeeting" placeholder="Search Meeting ID" />
                     <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
                 </div>
-                <span class="badge" id="taskCount" style="background:#0a1525;padding:4px 12px;border-radius:20px;font-size:12px;color:#89a9c9;">0 active</span>
+                <span class="badge" id="taskCount" style="background:#0a1525;padding:4px 12px;border-radius:20px;font-size:12px;color:#89a9c9;">0 meetings</span>
             </div>
             <table>
                 <thead>
@@ -760,6 +774,7 @@ refresh();
 async def dashboard():
     return HTMLResponse(DASHBOARD_HTML)
 
+# ========== RUN ==========
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
