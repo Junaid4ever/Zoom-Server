@@ -418,7 +418,7 @@ body {
   padding-bottom: 40px;
   -webkit-font-smoothing: antialiased;
 }
-.container { max-width: 1100px; margin: 0 auto; }
+.container { max-width: 1400px; margin: 0 auto; }
 
 /* Header */
 .header {
@@ -428,37 +428,46 @@ body {
   background: #111827;
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .header h1 {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
   color: #93c5fd;
 }
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 10px;
+  font-size: 13px;
 }
 .usage {
   background: #0f172a;
   border: 1px solid var(--border);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 20px;
   color: var(--muted);
 }
 .usage strong { color: var(--warning); }
 
-/* Cards */
+/* Layout */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 1000px) {
+  .grid { grid-template-columns: 380px 1fr; }
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
-  margin-bottom: 14px;
 }
 .section-title {
   font-size: 14px;
@@ -475,16 +484,14 @@ body {
   color: var(--muted);
   margin-bottom: 5px;
 }
-.form-group input,
-.form-group select,
-.form-group textarea {
+.form-group input, .form-group select, .form-group textarea {
   width: 100%;
-  padding: 12px 14px;
+  padding: 11px 13px;
   background: #0f172a;
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   outline: none;
 }
 .form-row {
@@ -504,10 +511,10 @@ body {
 }
 .mode-btn {
   flex: 1;
-  padding: 12px 0;
+  padding: 11px 0;
   text-align: center;
   border-radius: 9px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
@@ -554,11 +561,11 @@ body {
   margin-top: 4px;
 }
 .btn {
-  padding: 13px 16px;
+  padding: 12px 16px;
   border: none;
-  border-radius: 11px;
+  border-radius: 10px;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
 }
 .btn-primary {
@@ -571,19 +578,22 @@ body {
   color: #fecaca;
 }
 .btn-sm {
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 6px 11px;
+  font-size: 12px;
   border-radius: 8px;
 }
 .btn-outline {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--muted);
-  padding: 6px 10px;
+  padding: 6px 11px;
   font-size: 13px;
 }
 
-/* Meeting Cards (Mobile) */
+/* ========== MOBILE CARDS ========== */
+.mobile-only { display: block; }
+.desktop-only { display: none; }
+
 .meeting-card {
   background: #0f172a;
   border: 1px solid var(--border);
@@ -619,18 +629,6 @@ body {
   gap: 6px;
   margin-bottom: 10px;
 }
-.badge {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.badge-slow { background: #422006; color: #fbbf24; }
-.badge-together { background: #064e3b; color: #34d399; }
-.badge-indian { background: #1e3a5f; color: #93c5fd; }
-.badge-english { background: #064e3b; color: #6ee7b7; }
-.badge-custom { background: #4c1d95; color: #c4b5fd; }
 .mc-bottom {
   display: flex;
   justify-content: space-between;
@@ -638,13 +636,58 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* ========== DESKTOP TABLE ========== */
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 11px 9px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 11px 9px;
+  border-bottom: 1px solid #1e293b;
+  vertical-align: middle;
+}
+tr:hover td { background: #1e293b; }
+tr.highlight td {
+  background: #1e3a5f !important;
+  border-left: 3px solid var(--primary);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-slow { background: #422006; color: #fbbf24; }
+.badge-together { background: #064e3b; color: #34d399; }
+.badge-indian { background: #1e3a5f; color: #93c5fd; }
+.badge-english { background: #064e3b; color: #6ee7b7; }
+.badge-custom { background: #4c1d95; color: #c4b5fd; }
+
 .countdown {
   font-family: ui-monospace, monospace;
   color: var(--warning);
   font-weight: 600;
+  font-size: 12px;
 }
 
-/* Search */
 .search-row {
   display: flex;
   gap: 8px;
@@ -652,12 +695,12 @@ body {
 }
 .search-row input {
   flex: 1;
-  padding: 11px 14px;
+  padding: 10px 13px;
   background: #0f172a;
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   min-width: 0;
 }
 
@@ -684,25 +727,23 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-
 .empty {
   text-align: center;
   color: var(--muted);
-  padding: 24px 10px;
+  padding: 22px 10px;
   font-size: 14px;
 }
 
-/* Desktop table (hidden on mobile) */
-.desktop-table { display: none; }
+/* Desktop switches */
 @media (min-width: 768px) {
-  .desktop-table { display: block; }
-  .mobile-cards { display: none; }
-  .form-row { grid-template-columns: 1fr 1fr; }
+  .mobile-only { display: none; }
+  .desktop-only { display: block; }
   .header h1 { font-size: 20px; }
 }
 @media (max-width: 767px) {
   .form-row { grid-template-columns: 1fr; }
   .schedule-fields.show { grid-template-columns: 1fr; }
+  .btn { padding: 13px 14px; font-size: 15px; }
 }
 </style>
 </head>
@@ -710,7 +751,7 @@ body {
 <div class="container">
 
   <div class="header">
-    <h1>⚡ Zoom Command</h1>
+    <h1>⚡ Zoom Command Center</h1>
     <div class="header-right">
       <div class="usage"><strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
       <span id="liveTime" style="color:var(--muted)"></span>
@@ -718,98 +759,146 @@ body {
     </div>
   </div>
 
-  <!-- LAUNCH CARD -->
-  <div class="card">
-    <div class="section-title">🚀 Launch / Schedule</div>
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="section-title">🚀 Launch / Schedule</div>
 
-    <div class="mode-toggle">
-      <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
-      <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
-    </div>
+      <div class="mode-toggle">
+        <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
+        <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
+      </div>
 
-    <div class="form-group">
-      <label>Meeting ID</label>
-      <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
-    </div>
-    <div class="form-group">
-      <label>Passcode (optional)</label>
-      <input id="passcode" placeholder="Leave blank if none" />
-    </div>
-
-    <div class="form-row">
       <div class="form-group">
-        <label>Bots</label>
-        <input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()" />
+        <label>Meeting ID</label>
+        <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
       </div>
       <div class="form-group">
-        <label>Name Type</label>
-        <select id="nameType" onchange="toggleCustom()">
-          <option value="indian">🇮🇳 Indian</option>
-          <option value="english">🇺🇸 English</option>
-          <option value="custom">✏️ Custom</option>
-        </select>
+        <label>Passcode (optional)</label>
+        <input id="passcode" placeholder="Leave blank if none" />
       </div>
-    </div>
 
-    <div id="customBox">
-      <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
-      <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px">
-        Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong>
-        <span id="nameStatus"></span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Duration (minutes)</label>
-      <input type="number" id="duration" value="120" min="1" />
-    </div>
-
-    <div class="schedule-box">
-      <label class="schedule-check">
-        <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
-        Enable Scheduling
-      </label>
-      <div class="schedule-fields" id="scheduleFields">
-        <div class="form-group" style="margin:0">
-          <label>Date</label>
-          <input type="date" id="scheduleDate" />
+      <div class="form-row">
+        <div class="form-group">
+          <label>Bots</label>
+          <input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()" />
         </div>
-        <div class="form-group" style="margin:0">
-          <label>Time (IST)</label>
-          <input type="time" id="scheduleTime" />
+        <div class="form-group">
+          <label>Name Type</label>
+          <select id="nameType" onchange="toggleCustom()">
+            <option value="indian">🇮🇳 Indian</option>
+            <option value="english">🇺🇸 English</option>
+            <option value="custom">✏️ Custom</option>
+          </select>
         </div>
       </div>
+
+      <div id="customBox">
+        <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
+        <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">
+          Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong>
+          <span id="nameStatus"></span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" id="duration" value="120" min="1" />
+      </div>
+
+      <div class="schedule-box">
+        <label class="schedule-check">
+          <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
+          Enable Scheduling
+        </label>
+        <div class="schedule-fields" id="scheduleFields">
+          <div class="form-group" style="margin:0">
+            <label>Date</label>
+            <input type="date" id="scheduleDate" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Time (IST)</label>
+            <input type="time" id="scheduleTime" />
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
+        <button class="btn btn-danger" onclick="killAll()">Kill All</button>
+      </div>
+
+      <div id="msg" class="log">Ready • IST</div>
     </div>
 
-    <div class="btn-row">
-      <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
-      <button class="btn btn-danger" onclick="killAll()">Kill All</button>
-    </div>
+    <!-- RIGHT -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
 
-    <div id="msg" class="log">Ready • IST</div>
+      <!-- ACTIVE -->
+      <div class="card">
+        <div class="section-title">🟢 Active Meetings</div>
+        <div class="search-row">
+          <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
+          <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
+        </div>
+
+        <!-- Mobile Cards -->
+        <div id="activeListMobile" class="mobile-only">
+          <div class="empty">No active meetings</div>
+        </div>
+
+        <!-- Desktop Table -->
+        <div class="desktop-only table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Meeting</th>
+                <th>Bots</th>
+                <th>Started</th>
+                <th>Mode</th>
+                <th>Names</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbodyActive">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SCHEDULED -->
+      <div class="card">
+        <div class="section-title">📅 Scheduled Meetings</div>
+
+        <div id="scheduleListMobile" class="mobile-only">
+          <div class="empty">No scheduled meetings</div>
+        </div>
+
+        <div class="desktop-only table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Meeting</th>
+                <th>Bots</th>
+                <th>When</th>
+                <th>Countdown</th>
+                <th>Mode</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbodySchedule">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
   </div>
-
-  <!-- ACTIVE -->
-  <div class="card">
-    <div class="section-title">🟢 Active Meetings</div>
-    <div class="search-row">
-      <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
-      <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
-    </div>
-    <div id="activeList" class="mobile-cards">
-      <div class="empty">No active meetings</div>
-    </div>
-  </div>
-
-  <!-- SCHEDULED -->
-  <div class="card">
-    <div class="section-title">📅 Scheduled Meetings</div>
-    <div id="scheduleList" class="mobile-cards">
-      <div class="empty">No scheduled meetings</div>
-    </div>
-  </div>
-
 </div>
 
 <script>
@@ -853,7 +942,7 @@ function updCount() {
 customNames.addEventListener('input', updCount);
 
 function updateClock() {
-  liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+  liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'}) + ' IST';
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -878,66 +967,111 @@ function renderActive(meetings) {
   let filtered = Object.entries(meetings);
   if (search) filtered = filtered.filter(([m]) => m.toLowerCase().includes(search));
 
+  // Mobile cards
   if (!filtered.length) {
-    activeList.innerHTML = '<div class="empty">No active meetings</div>';
-    return;
+    activeListMobile.innerHTML = '<div class="empty">No active meetings</div>';
+  } else {
+    activeListMobile.innerHTML = filtered.map(([meeting, m]) => {
+      const bots = m.total_bots || 0;
+      const type = m.name_type || 'indian';
+      const mode = m.join_mode || 'individual';
+      const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+      const isHighlight = search && meeting.toLowerCase().includes(search);
+      return `
+        <div class="meeting-card ${isHighlight ? 'highlight' : ''}">
+          <div class="mc-top">
+            <div class="mc-id">${meeting}</div>
+            <div class="mc-bots">${bots}</div>
+          </div>
+          <div class="mc-meta">
+            <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
+            <span class="badge badge-${type}">${type}</span>
+          </div>
+          <div class="mc-bottom">
+            <span>Started: ${startTime}</span>
+            <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+          </div>
+        </div>`;
+    }).join('');
   }
 
-  activeList.innerHTML = filtered.map(([meeting, m]) => {
-    const bots = m.total_bots || 0;
-    const type = m.name_type || 'indian';
-    const mode = m.join_mode || 'individual';
-    const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
-    const isHighlight = search && meeting.toLowerCase().includes(search);
-    return `
-      <div class="meeting-card ${isHighlight ? 'highlight' : ''}">
-        <div class="mc-top">
-          <div class="mc-id">${meeting}</div>
-          <div class="mc-bots">${bots}</div>
-        </div>
-        <div class="mc-meta">
-          <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
-          <span class="badge badge-${type}">${type}</span>
-        </div>
-        <div class="mc-bottom">
-          <span>Started: ${startTime}</span>
-          <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
-        </div>
-      </div>`;
-  }).join('');
+  // Desktop table
+  if (!filtered.length) {
+    tbodyActive.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>';
+  } else {
+    let idx = 0;
+    tbodyActive.innerHTML = filtered.map(([meeting, m]) => {
+      idx++;
+      const bots = m.total_bots || 0;
+      const type = m.name_type || 'indian';
+      const mode = m.join_mode || 'individual';
+      const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+      const isHighlight = search && meeting.toLowerCase().includes(search);
+      return `<tr class="${isHighlight ? 'highlight' : ''}">
+        <td>${idx}</td>
+        <td style="font-weight:600;color:#93c5fd">${meeting}</td>
+        <td><strong style="color:#fbbf24">${bots}</strong></td>
+        <td>${startTime}</td>
+        <td><span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span></td>
+        <td><span class="badge badge-${type}">${type}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 function renderSchedules(schedules) {
   allSchedules = schedules;
   const entries = Object.entries(schedules);
+
+  // Mobile
   if (!entries.length) {
-    scheduleList.innerHTML = '<div class="empty">No scheduled meetings</div>';
-    return;
+    scheduleListMobile.innerHTML = '<div class="empty">No scheduled meetings</div>';
+  } else {
+    scheduleListMobile.innerHTML = entries.map(([sid, s]) => {
+      const when = new Date(s.schedule_at).toLocaleString('en-IN', {
+        timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+      });
+      return `
+        <div class="meeting-card">
+          <div class="mc-top">
+            <div class="mc-id">${s.meeting_code}</div>
+            <div class="mc-bots">${s.bot_count}</div>
+          </div>
+          <div class="mc-meta">
+            <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
+            <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
+          </div>
+          <div class="mc-bottom">
+            <div>
+              <div>${when}</div>
+              <div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
+          </div>
+        </div>`;
+    }).join('');
   }
 
-  scheduleList.innerHTML = entries.map(([sid, s]) => {
-    const when = new Date(s.schedule_at).toLocaleString('en-IN', {
-      timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
-    });
-    return `
-      <div class="meeting-card">
-        <div class="mc-top">
-          <div class="mc-id">${s.meeting_code}</div>
-          <div class="mc-bots">${s.bot_count}</div>
-        </div>
-        <div class="mc-meta">
-          <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
-          <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
-        </div>
-        <div class="mc-bottom">
-          <div>
-            <div>${when}</div>
-            <div class="countdown" id="cd-${sid}">${formatCountdown(s.schedule_at)}</div>
-          </div>
-          <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
-        </div>
-      </div>`;
-  }).join('');
+  // Desktop
+  if (!entries.length) {
+    tbodySchedule.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';
+  } else {
+    let idx = 0;
+    tbodySchedule.innerHTML = entries.map(([sid, s]) => {
+      idx++;
+      const when = new Date(s.schedule_at).toLocaleString('en-IN', {timeZone:'Asia/Kolkata'});
+      return `<tr>
+        <td>${idx}</td>
+        <td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
+        <td><strong style="color:#fbbf24">${s.bot_count}</strong></td>
+        <td>${when}</td>
+        <td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td>
+        <td><span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 function filterMeetings() { renderActive(allMeetings); }
@@ -964,8 +1098,11 @@ async function refresh() {
 
 setInterval(() => {
   Object.keys(allSchedules).forEach(sid => {
-    const el = document.getElementById('cd-' + sid);
-    if (el) el.textContent = formatCountdown(allSchedules[sid].schedule_at);
+    const el1 = document.getElementById('cd-m-' + sid);
+    const el2 = document.getElementById('cd-d-' + sid);
+    const txt = formatCountdown(allSchedules[sid].schedule_at);
+    if (el1) el1.textContent = txt;
+    if (el2) el2.textContent = txt;
   });
 }, 1000);
 
