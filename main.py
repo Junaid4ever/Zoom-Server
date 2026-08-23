@@ -1,330 +1,4 @@
-# ============================================
-# ZOOM BOT CENTRAL – FULL UPDATED (IST + Session + Cumulative)
-# ============================================
-import os
-import uuid
-import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
-import socketio
-
-# ========== IST ==========
-IST = timezone(timedelta(hours=5, minutes=30))
-
-def now_ist():
-    return datetime.now(IST)
-
-def ist_str(dt=None):
-    if dt is None:
-        dt = now_ist()
-    if isinstance(dt, str):
-        try:
-            dt = datetime.fromisoformat(dt)
-        except:
-            return dt
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(IST).strftime("%H:%M:%S")
-
-# ========== SOCKET.IO ==========
-sio = socketio.AsyncServer(
-    async_mode="asgi",
-    cors_allowed_origins="*",
-    logger=False,
-    engineio_logger=False
-)
-
-app = FastAPI(title="Zoom Bot Central")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
-
-workers = {}
-running_tasks = {}          # task_id -> info
-meeting_groups = {}         # meeting_code -> [task_ids]
-
-# ========== MODELS ==========
-class StartBotRequest(BaseModel):
-    meeting_code: str
-    passcode: str = ""
-    bot_count: int = 10
-    duration_minutes: int = 120
-    name_type: str = "indian"
-    custom_names: Optional[List[str]] = None
-    join_mode: str = "individual"
-
-class TerminateRequest(BaseModel):
-    meeting_code: Optional[str] = None
-    task_id: Optional[str] = None
-
-# ========== SOCKET EVENTS ==========
-@sio.event
-async def connect(sid, environ):
-    print(f"[SIO] Connected: {sid}")
-
-@sio.event
-async def disconnect(sid):
-    for wid, info in list(workers.items()):
-        if info.get("sid") == sid:
-            workers[wid]["sid"] = None
-            workers[wid]["last_seen"] = now_ist().isoformat()
-            print(f"[SIO] Worker {wid} offline (tasks preserved)")
-            break
-
-@sio.event
-async def register_worker(sid, data):
-    wid = data.get("worker_id", f"worker-{sid[:6]}")
-    max_cap = int(data.get("max_capacity", 10))
-    now = now_ist().isoformat()
-
-    if wid in workers:
-        workers[wid]["sid"] = sid
-        workers[wid]["max_capacity"] = max_cap
-        workers[wid]["last_seen"] = now
-        print(f"[SIO] Worker {wid} reconnected | free={workers[wid]['free_capacity']}")
-    else:
-        workers[wid] = {
-            "sid": sid,
-            "max_capacity": max_cap,
-            "free_capacity": max_cap,
-            "last_seen": now
-        }
-        print(f"[SIO] New worker {wid} | capacity={max_cap}")
-
-    await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
-
-@sio.event
-async def update_capacity(sid, data):
-    wid = data.get("worker_id")
-    if wid in workers:
-        workers[wid]["free_capacity"] = max(0, int(data.get("free_capacity", 0)))
-        workers[wid]["last_seen"] = now_ist().isoformat()
-
-@sio.event
-async def task_completed(sid, data):
-    tid = data.get("task_id")
-    if tid and tid in running_tasks:
-        wid = running_tasks[tid].get("worker_id")
-        if wid and wid in workers:
-            workers[wid]["free_capacity"] = min(
-                workers[wid]["max_capacity"],
-                workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
-            )
-        meeting = running_tasks[tid].get("meeting_code")
-        if meeting and meeting in meeting_groups and tid in meeting_groups[meeting]:
-            meeting_groups[meeting].remove(tid)
-            if not meeting_groups[meeting]:
-                del meeting_groups[meeting]
-        del running_tasks[tid]
-        print(f"[SIO] Task completed: {tid}")
-
-# ========== API ROUTES ==========
-@app.get("/health")
-async def health():
-    return {"ok": True, "workers": len(workers), "time": now_ist().isoformat()}
-
-@app.get("/session")
-async def get_session():
-    """Marimo Worker isse session fetch karega"""
-    if not os.path.exists("zoom_session.json"):
-        raise HTTPException(status_code=404, detail="Session file not found")
-    return FileResponse("zoom_session.json", media_type="application/json")
-
-@app.get("/status")
-@app.get("/api/status")
-async def status():
-    total_free = sum(w.get("free_capacity", 0) for w in workers.values())
-    now = now_ist()
-
-    meetings = {}
-    for tid, task in list(running_tasks.items()):
-        meeting = task.get("meeting_code", "unknown")
-        if meeting not in meetings:
-            meetings[meeting] = {
-                "meeting_code": meeting,
-                "total_bots": 0,
-                "tasks": [],
-                "name_type": task.get("name_type", "indian"),
-                "started_at": task.get("started_at"),
-                "duration_minutes": task.get("duration_minutes", 120),
-                "join_mode": task.get("join_mode", "individual")
-            }
-        meetings[meeting]["total_bots"] += task.get("bot_count", 0)
-        meetings[meeting]["tasks"].append(tid)
-
-        if "started_at" in task:
-            try:
-                started = datetime.fromisoformat(task["started_at"])
-                if started.tzinfo is None:
-                    started = started.replace(tzinfo=IST)
-                elapsed = (now - started).total_seconds() / 60
-                task["elapsed_minutes"] = round(elapsed, 1)
-                task["remaining_minutes"] = max(0, round(task.get("duration_minutes", 120) - elapsed, 1))
-            except:
-                task["remaining_minutes"] = task.get("duration_minutes", 120)
-
-        if task.get("started_at") and (meetings[meeting]["started_at"] is None or task["started_at"] > meetings[meeting]["started_at"]):
-            meetings[meeting]["started_at"] = task["started_at"]
-            meetings[meeting]["duration_minutes"] = task.get("duration_minutes", 120)
-
-    return {
-        "workers": workers,
-        "running_tasks": running_tasks,
-        "meetings": meetings,
-        "total_free_capacity": total_free,
-        "timestamp": now.isoformat()
-    }
-
-@app.post("/api/start-bots")
-async def start_bots(req: StartBotRequest):
-    if req.bot_count < 1:
-        raise HTTPException(400, "bot_count must be >= 1")
-
-    meeting = req.meeting_code.strip().replace(" ", "")
-    if not meeting:
-        raise HTTPException(400, "meeting_code required")
-
-    remaining = req.bot_count
-    assigned = []
-
-    sorted_workers = sorted(
-        workers.items(),
-        key=lambda x: x[1].get("free_capacity", 0),
-        reverse=True
-    )
-
-    for wid, info in sorted_workers:
-        if remaining <= 0:
-            break
-        free = int(info.get("free_capacity", 0))
-        if free <= 0 or not info.get("sid"):
-            continue
-
-        give = min(free, remaining)
-        task_id = str(uuid.uuid4())[:8]
-
-        payload = {
-            "task_id": task_id,
-            "meeting_code": meeting,
-            "passcode": req.passcode or "",
-            "bot_count": give,
-            "duration_minutes": req.duration_minutes,
-            "name_type": req.name_type or "indian",
-            "custom_names": req.custom_names,
-            "join_mode": req.join_mode or "individual"
-        }
-
-        await sio.emit("new_task", payload, to=info["sid"])
-
-        running_tasks[task_id] = {
-            "task_id": task_id,
-            "meeting_code": meeting,
-            "bot_count": give,
-            "worker_id": wid,
-            "name_type": payload["name_type"],
-            "duration_minutes": req.duration_minutes,
-            "started_at": now_ist().isoformat(),
-            "remaining_minutes": req.duration_minutes,
-            "join_mode": req.join_mode or "individual"
-        }
-
-        if meeting not in meeting_groups:
-            meeting_groups[meeting] = []
-        meeting_groups[meeting].append(task_id)
-
-        workers[wid]["free_capacity"] = max(0, free - give)
-        assigned.append({"worker": wid, "bots": give, "task_id": task_id})
-        remaining -= give
-        print(f"[API] Task {task_id} → {wid} ({give} bots) | Meeting: {meeting}")
-
-    if not assigned:
-        raise HTTPException(503, "No free capacity or no connected workers.")
-
-    return {
-        "success": True,
-        "message": f"Started {req.bot_count - remaining} bots for {meeting}",
-        "assigned": assigned,
-        "remaining_unassigned": remaining
-    }
-
-@app.post("/api/terminate")
-@app.post("/api/kill-meeting")
-async def terminate(req: Optional[TerminateRequest] = None):
-    if req and req.task_id:
-        task_id = req.task_id
-        if task_id not in running_tasks:
-            raise HTTPException(404, "Task not found")
-        meeting = running_tasks[task_id].get("meeting_code")
-        wid = running_tasks[task_id].get("worker_id")
-
-        if wid in workers and workers[wid].get("sid"):
-            await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
-
-        if wid and wid in workers:
-            workers[wid]["free_capacity"] = min(
-                workers[wid]["max_capacity"],
-                workers[wid].get("free_capacity", 0) + running_tasks[task_id].get("bot_count", 0)
-            )
-
-        if meeting and meeting in meeting_groups and task_id in meeting_groups[meeting]:
-            meeting_groups[meeting].remove(task_id)
-            if not meeting_groups[meeting]:
-                del meeting_groups[meeting]
-
-        del running_tasks[task_id]
-        print(f"[API] Terminate task {task_id}")
-        return {"success": True, "message": f"Task {task_id} terminated"}
-
-    elif req and req.meeting_code:
-        meeting = req.meeting_code.strip().replace(" ", "")
-        to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
-        if not to_kill:
-            raise HTTPException(404, f"No active tasks for meeting {meeting}")
-
-        for tid in to_kill:
-            wid = running_tasks[tid].get("worker_id")
-            if wid in workers and workers[wid].get("sid"):
-                await sio.emit("terminate", {"task_id": tid, "meeting_code": meeting}, to=workers[wid]["sid"])
-            if wid and wid in workers:
-                workers[wid]["free_capacity"] = min(
-                    workers[wid]["max_capacity"],
-                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
-                )
-            del running_tasks[tid]
-
-        if meeting in meeting_groups:
-            del meeting_groups[meeting]
-
-        print(f"[API] Terminate meeting {meeting} ({len(to_kill)} tasks)")
-        return {"success": True, "message": f"Meeting {meeting} terminated ({len(to_kill)} tasks)"}
-
-    else:
-        # Kill ALL
-        for tid in list(running_tasks.keys()):
-            wid = running_tasks[tid].get("worker_id")
-            if wid in workers and workers[wid].get("sid"):
-                await sio.emit("terminate", {"task_id": tid, "meeting_code": None}, to=workers[wid]["sid"])
-            if wid and wid in workers:
-                workers[wid]["free_capacity"] = min(
-                    workers[wid]["max_capacity"],
-                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
-                )
-        running_tasks.clear()
-        meeting_groups.clear()
-        print("[API] Terminate ALL")
-        return {"success": True, "message": "All tasks terminated"}
-
-# ========== DASHBOARD ==========
-DASHBOARD_HTML = r"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -354,7 +28,6 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         font-size: 22px;
         font-weight: 700;
         color: #7eb6ff;
-        letter-spacing: 0.3px;
     }
     .header h1 span { color: #4a9eff; }
     .header-right {
@@ -373,7 +46,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .usage strong { color: #ffd166; }
     .main-grid {
         display: grid;
-        grid-template-columns: 340px 1fr;
+        grid-template-columns: 360px 1fr;
         gap: 18px;
     }
     @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
@@ -438,6 +111,36 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .btn-outline { background: transparent; border: 1px solid #2a4a6a; color: #8ab4f8; }
     .btn-outline:hover { background: #1a2a3a; }
     .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+    /* Toggle Switch */
+    .mode-toggle {
+        display: flex;
+        background: #0a1525;
+        border-radius: 8px;
+        padding: 4px;
+        border: 1px solid #1e3a5f;
+        margin-bottom: 14px;
+    }
+    .mode-btn {
+        flex: 1;
+        padding: 8px 0;
+        text-align: center;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: #89a9c9;
+        user-select: none;
+    }
+    .mode-btn.active {
+        background: #2a7acc;
+        color: white;
+    }
+    .mode-btn:hover:not(.active) {
+        background: #1a2a3a;
+    }
+
     .right-panel .table-header {
         display: flex;
         justify-content: space-between;
@@ -463,7 +166,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         border-radius: 6px;
         color: #e0e8f0;
         font-size: 13px;
-        width: 160px;
+        width: 170px;
     }
     table {
         width: 100%;
@@ -486,6 +189,16 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         vertical-align: middle;
     }
     tr:hover td { background: #1a2a3a; }
+
+    /* Highlight searched meeting */
+    tr.highlight td {
+        background: #1a3a5a !important;
+        border-left: 4px solid #4a9eff;
+    }
+    tr.highlight {
+        box-shadow: 0 0 0 1px #4a9eff;
+    }
+
     .meeting-id {
         font-weight: 600;
         color: #7eb6ff;
@@ -501,6 +214,17 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .badge-indian { border-color: #4a9eff; color: #4a9eff; }
     .badge-english { border-color: #6aaa6a; color: #6aaa6a; }
     .badge-custom { border-color: #c29a4a; color: #c29a4a; }
+    .badge-mode {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 500;
+        border: 1px solid;
+    }
+    .badge-slow { border-color: #c29a4a; color: #c29a4a; }
+    .badge-together { border-color: #6aaa6a; color: #6aaa6a; }
+
     .log {
         margin-top: 12px;
         padding: 8px 12px;
@@ -509,7 +233,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         border-radius: 6px;
         font-size: 12px;
         color: #89a9c9;
-        font-family: 'Cascadia Code', 'Fira Code', monospace;
+        font-family: monospace;
         min-height: 32px;
     }
     .log .ok { color: #6aaa6a; }
@@ -542,6 +266,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     <div class="main-grid">
         <div class="left-panel">
             <div class="section-title">Launch Bots</div>
+
+            <!-- Slow / Together Toggle -->
+            <div class="mode-toggle">
+                <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
+                <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
+            </div>
+
             <div class="form-group">
                 <label>Meeting ID</label>
                 <input id="meetingId" placeholder="98695209590" />
@@ -584,10 +315,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <div class="table-header">
                 <h2>Active Meetings</h2>
                 <div class="search-box">
-                    <input id="searchMeeting" placeholder="Search Meeting ID" />
+                    <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
                     <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
                 </div>
-                <span class="badge" id="taskCount" style="background:#0a1525;padding:4px 12px;border-radius:20px;font-size:12px;color:#89a9c9;">0 meetings</span>
+                <span id="taskCount" style="background:#0a1525;padding:4px 12px;border-radius:20px;font-size:12px;color:#89a9c9;">0 meetings</span>
             </div>
             <table>
                 <thead>
@@ -596,7 +327,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
                         <th>Meeting ID</th>
                         <th>Total Bots</th>
                         <th>Started (IST)</th>
-                        <th>Remaining</th>
+                        <th>Mode</th>
                         <th>Names</th>
                         <th>Action</th>
                     </tr>
@@ -612,6 +343,15 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <script>
 const API = location.origin;
 const $ = id => document.getElementById(id);
+
+let currentMode = 'individual';   // default Slow
+let allMeetings = {};             // store for filtering
+
+function setMode(mode) {
+    currentMode = mode;
+    $('modeSlow').classList.toggle('active', mode === 'individual');
+    $('modeTogether').classList.toggle('active', mode === 'together');
+}
 
 function show(m, type='info'){
     const cls = type==='ok'?'ok':type==='err'?'err':'info';
@@ -640,6 +380,52 @@ function updateClock(){
 setInterval(updateClock, 1000);
 updateClock();
 
+function renderMeetings(meetings) {
+    allMeetings = meetings;
+    const search = ($('searchMeeting').value || '').trim().toLowerCase();
+
+    let filtered = Object.entries(meetings);
+    if (search) {
+        filtered = filtered.filter(([m]) => m.toLowerCase().includes(search));
+    }
+
+    taskCount.textContent = Object.keys(meetings).length + ' meetings';
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#89a9c9;padding:20px;">No active meetings</td></tr>';
+        return;
+    }
+
+    let idx = 0;
+    tbody.innerHTML = filtered.map(([meeting, m]) => {
+        idx++;
+        const bots = m.total_bots || 0;
+        const type = m.name_type || 'indian';
+        const mode = m.join_mode || 'individual';
+        const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+        const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
+        const modeBadge = mode === 'together' ? 'together' : 'slow';
+        const modeText = mode === 'together' ? 'Together' : 'Slow';
+        const isHighlight = search && meeting.toLowerCase().includes(search);
+
+        return `<tr class="${isHighlight ? 'highlight' : ''}">
+            <td>${idx}</td>
+            <td class="meeting-id">${meeting}</td>
+            <td><strong style="color:#ffd166">${bots}</strong></td>
+            <td>${startTime}</td>
+            <td><span class="badge-mode badge-${modeBadge}">${modeText}</span></td>
+            <td><span class="badge-type badge-${typeBadge}">${type}</span></td>
+            <td>
+                <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function filterMeetings() {
+    renderMeetings(allMeetings);
+}
+
 async function refresh(){
     try{
         const r = await fetch(API+'/status');
@@ -654,32 +440,8 @@ async function refresh(){
         });
         totalCap.textContent = total - free;
         totalCapMax.textContent = total;
-        taskCount.textContent = Object.keys(meetings).length + ' meetings';
 
-        if(!Object.keys(meetings).length){
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#89a9c9;padding:20px;">No active meetings</td></tr>';
-        } else {
-            let idx = 0;
-            tbody.innerHTML = Object.entries(meetings).map(([meeting, m])=>{
-                idx++;
-                const bots = m.total_bots || 0;
-                const type = m.name_type || 'indian';
-                const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
-                const remaining = m.duration_minutes || 120;
-                const typeBadge = type === 'indian' ? 'indian' : type === 'english' ? 'english' : 'custom';
-                return `<tr>
-                    <td>${idx}</td>
-                    <td class="meeting-id">${meeting}</td>
-                    <td><strong>${bots}</strong></td>
-                    <td>${startTime}</td>
-                    <td>${remaining} min</td>
-                    <td><span class="badge-type badge-${typeBadge}">${type}</span></td>
-                    <td>
-                        <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
-                    </td>
-                </tr>`;
-            }).join('');
-        }
+        renderMeetings(meetings);
         show('Status refreshed', 'ok');
     } catch(e){
         show(e.message || 'Refresh failed', 'err');
@@ -700,7 +462,7 @@ async function startBots(){
     if(!meeting) return show('Meeting ID required', 'err');
 
     try{
-        show('Starting bots...', 'info');
+        show(`Starting ${bots} bots in ${currentMode === 'together' ? 'Together' : 'Slow'} mode...`, 'info');
         const r = await fetch(API+'/api/start-bots', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
@@ -710,7 +472,7 @@ async function startBots(){
                 duration_minutes: dur,
                 name_type: type,
                 custom_names: custom,
-                join_mode: 'individual'
+                join_mode: currentMode          // ← Slow or Together
             })
         });
         const d = await r.json();
@@ -768,14 +530,3 @@ refresh();
 </script>
 </body>
 </html>
-"""
-
-@app.get("/", response_class=HTMLResponse)
-async def dashboard():
-    return HTMLResponse(DASHBOARD_HTML)
-
-# ========== RUN ==========
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(asgi_app, host="0.0.0.0", port=port)
