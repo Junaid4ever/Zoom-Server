@@ -1,4 +1,330 @@
-<!DOCTYPE html>
+# ============================================
+# ZOOM BOT CENTRAL – FULL UPDATED (IST + Session + Cumulative)
+# ============================================
+import os
+import uuid
+import asyncio
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, FileResponse
+from pydantic import BaseModel
+import socketio
+
+# ========== IST ==========
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def now_ist():
+    return datetime.now(IST)
+
+def ist_str(dt=None):
+    if dt is None:
+        dt = now_ist()
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except:
+            return dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(IST).strftime("%H:%M:%S")
+
+# ========== SOCKET.IO ==========
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins="*",
+    logger=False,
+    engineio_logger=False
+)
+
+app = FastAPI(title="Zoom Bot Central")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+workers = {}
+running_tasks = {}          # task_id -> info
+meeting_groups = {}         # meeting_code -> [task_ids]
+
+# ========== MODELS ==========
+class StartBotRequest(BaseModel):
+    meeting_code: str
+    passcode: str = ""
+    bot_count: int = 10
+    duration_minutes: int = 120
+    name_type: str = "indian"
+    custom_names: Optional[List[str]] = None
+    join_mode: str = "individual"
+
+class TerminateRequest(BaseModel):
+    meeting_code: Optional[str] = None
+    task_id: Optional[str] = None
+
+# ========== SOCKET EVENTS ==========
+@sio.event
+async def connect(sid, environ):
+    print(f"[SIO] Connected: {sid}")
+
+@sio.event
+async def disconnect(sid):
+    for wid, info in list(workers.items()):
+        if info.get("sid") == sid:
+            workers[wid]["sid"] = None
+            workers[wid]["last_seen"] = now_ist().isoformat()
+            print(f"[SIO] Worker {wid} offline (tasks preserved)")
+            break
+
+@sio.event
+async def register_worker(sid, data):
+    wid = data.get("worker_id", f"worker-{sid[:6]}")
+    max_cap = int(data.get("max_capacity", 10))
+    now = now_ist().isoformat()
+
+    if wid in workers:
+        workers[wid]["sid"] = sid
+        workers[wid]["max_capacity"] = max_cap
+        workers[wid]["last_seen"] = now
+        print(f"[SIO] Worker {wid} reconnected | free={workers[wid]['free_capacity']}")
+    else:
+        workers[wid] = {
+            "sid": sid,
+            "max_capacity": max_cap,
+            "free_capacity": max_cap,
+            "last_seen": now
+        }
+        print(f"[SIO] New worker {wid} | capacity={max_cap}")
+
+    await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
+
+@sio.event
+async def update_capacity(sid, data):
+    wid = data.get("worker_id")
+    if wid in workers:
+        workers[wid]["free_capacity"] = max(0, int(data.get("free_capacity", 0)))
+        workers[wid]["last_seen"] = now_ist().isoformat()
+
+@sio.event
+async def task_completed(sid, data):
+    tid = data.get("task_id")
+    if tid and tid in running_tasks:
+        wid = running_tasks[tid].get("worker_id")
+        if wid and wid in workers:
+            workers[wid]["free_capacity"] = min(
+                workers[wid]["max_capacity"],
+                workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+            )
+        meeting = running_tasks[tid].get("meeting_code")
+        if meeting and meeting in meeting_groups and tid in meeting_groups[meeting]:
+            meeting_groups[meeting].remove(tid)
+            if not meeting_groups[meeting]:
+                del meeting_groups[meeting]
+        del running_tasks[tid]
+        print(f"[SIO] Task completed: {tid}")
+
+# ========== API ROUTES ==========
+@app.get("/health")
+async def health():
+    return {"ok": True, "workers": len(workers), "time": now_ist().isoformat()}
+
+@app.get("/session")
+async def get_session():
+    """Marimo Worker isse session fetch karega"""
+    if not os.path.exists("zoom_session.json"):
+        raise HTTPException(status_code=404, detail="Session file not found")
+    return FileResponse("zoom_session.json", media_type="application/json")
+
+@app.get("/status")
+@app.get("/api/status")
+async def status():
+    total_free = sum(w.get("free_capacity", 0) for w in workers.values())
+    now = now_ist()
+
+    meetings = {}
+    for tid, task in list(running_tasks.items()):
+        meeting = task.get("meeting_code", "unknown")
+        if meeting not in meetings:
+            meetings[meeting] = {
+                "meeting_code": meeting,
+                "total_bots": 0,
+                "tasks": [],
+                "name_type": task.get("name_type", "indian"),
+                "started_at": task.get("started_at"),
+                "duration_minutes": task.get("duration_minutes", 120),
+                "join_mode": task.get("join_mode", "individual")
+            }
+        meetings[meeting]["total_bots"] += task.get("bot_count", 0)
+        meetings[meeting]["tasks"].append(tid)
+
+        if "started_at" in task:
+            try:
+                started = datetime.fromisoformat(task["started_at"])
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=IST)
+                elapsed = (now - started).total_seconds() / 60
+                task["elapsed_minutes"] = round(elapsed, 1)
+                task["remaining_minutes"] = max(0, round(task.get("duration_minutes", 120) - elapsed, 1))
+            except:
+                task["remaining_minutes"] = task.get("duration_minutes", 120)
+
+        if task.get("started_at") and (meetings[meeting]["started_at"] is None or task["started_at"] > meetings[meeting]["started_at"]):
+            meetings[meeting]["started_at"] = task["started_at"]
+            meetings[meeting]["duration_minutes"] = task.get("duration_minutes", 120)
+
+    return {
+        "workers": workers,
+        "running_tasks": running_tasks,
+        "meetings": meetings,
+        "total_free_capacity": total_free,
+        "timestamp": now.isoformat()
+    }
+
+@app.post("/api/start-bots")
+async def start_bots(req: StartBotRequest):
+    if req.bot_count < 1:
+        raise HTTPException(400, "bot_count must be >= 1")
+
+    meeting = req.meeting_code.strip().replace(" ", "")
+    if not meeting:
+        raise HTTPException(400, "meeting_code required")
+
+    remaining = req.bot_count
+    assigned = []
+
+    sorted_workers = sorted(
+        workers.items(),
+        key=lambda x: x[1].get("free_capacity", 0),
+        reverse=True
+    )
+
+    for wid, info in sorted_workers:
+        if remaining <= 0:
+            break
+        free = int(info.get("free_capacity", 0))
+        if free <= 0 or not info.get("sid"):
+            continue
+
+        give = min(free, remaining)
+        task_id = str(uuid.uuid4())[:8]
+
+        payload = {
+            "task_id": task_id,
+            "meeting_code": meeting,
+            "passcode": req.passcode or "",
+            "bot_count": give,
+            "duration_minutes": req.duration_minutes,
+            "name_type": req.name_type or "indian",
+            "custom_names": req.custom_names,
+            "join_mode": req.join_mode or "individual"
+        }
+
+        await sio.emit("new_task", payload, to=info["sid"])
+
+        running_tasks[task_id] = {
+            "task_id": task_id,
+            "meeting_code": meeting,
+            "bot_count": give,
+            "worker_id": wid,
+            "name_type": payload["name_type"],
+            "duration_minutes": req.duration_minutes,
+            "started_at": now_ist().isoformat(),
+            "remaining_minutes": req.duration_minutes,
+            "join_mode": req.join_mode or "individual"
+        }
+
+        if meeting not in meeting_groups:
+            meeting_groups[meeting] = []
+        meeting_groups[meeting].append(task_id)
+
+        workers[wid]["free_capacity"] = max(0, free - give)
+        assigned.append({"worker": wid, "bots": give, "task_id": task_id})
+        remaining -= give
+        print(f"[API] Task {task_id} → {wid} ({give} bots) | Meeting: {meeting}")
+
+    if not assigned:
+        raise HTTPException(503, "No free capacity or no connected workers.")
+
+    return {
+        "success": True,
+        "message": f"Started {req.bot_count - remaining} bots for {meeting}",
+        "assigned": assigned,
+        "remaining_unassigned": remaining
+    }
+
+@app.post("/api/terminate")
+@app.post("/api/kill-meeting")
+async def terminate(req: Optional[TerminateRequest] = None):
+    if req and req.task_id:
+        task_id = req.task_id
+        if task_id not in running_tasks:
+            raise HTTPException(404, "Task not found")
+        meeting = running_tasks[task_id].get("meeting_code")
+        wid = running_tasks[task_id].get("worker_id")
+
+        if wid in workers and workers[wid].get("sid"):
+            await sio.emit("terminate", {"task_id": task_id, "meeting_code": meeting}, to=workers[wid]["sid"])
+
+        if wid and wid in workers:
+            workers[wid]["free_capacity"] = min(
+                workers[wid]["max_capacity"],
+                workers[wid].get("free_capacity", 0) + running_tasks[task_id].get("bot_count", 0)
+            )
+
+        if meeting and meeting in meeting_groups and task_id in meeting_groups[meeting]:
+            meeting_groups[meeting].remove(task_id)
+            if not meeting_groups[meeting]:
+                del meeting_groups[meeting]
+
+        del running_tasks[task_id]
+        print(f"[API] Terminate task {task_id}")
+        return {"success": True, "message": f"Task {task_id} terminated"}
+
+    elif req and req.meeting_code:
+        meeting = req.meeting_code.strip().replace(" ", "")
+        to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
+        if not to_kill:
+            raise HTTPException(404, f"No active tasks for meeting {meeting}")
+
+        for tid in to_kill:
+            wid = running_tasks[tid].get("worker_id")
+            if wid in workers and workers[wid].get("sid"):
+                await sio.emit("terminate", {"task_id": tid, "meeting_code": meeting}, to=workers[wid]["sid"])
+            if wid and wid in workers:
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
+            del running_tasks[tid]
+
+        if meeting in meeting_groups:
+            del meeting_groups[meeting]
+
+        print(f"[API] Terminate meeting {meeting} ({len(to_kill)} tasks)")
+        return {"success": True, "message": f"Meeting {meeting} terminated ({len(to_kill)} tasks)"}
+
+    else:
+        # Kill ALL
+        for tid in list(running_tasks.keys()):
+            wid = running_tasks[tid].get("worker_id")
+            if wid in workers and workers[wid].get("sid"):
+                await sio.emit("terminate", {"task_id": tid, "meeting_code": None}, to=workers[wid]["sid"])
+            if wid and wid in workers:
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
+        running_tasks.clear()
+        meeting_groups.clear()
+        print("[API] Terminate ALL")
+        return {"success": True, "message": "All tasks terminated"}
+
+# ========== DASHBOARD ==========
+DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -530,3 +856,15 @@ refresh();
 </script>
 </body>
 </html>
+
+"""
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard():
+    return HTMLResponse(DASHBOARD_HTML)
+
+# ========== RUN ==========
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(asgi_app, host="0.0.0.0", port=port)
