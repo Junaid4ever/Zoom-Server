@@ -398,470 +398,418 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <title>Zoom Command Center</title>
 <style>
 :root {
-    --bg: #0c0f14;
-    --card: #151a23;
-    --border: #252d3a;
-    --primary: #3b82f6;
-    --primary-hover: #2563eb;
-    --success: #10b981;
-    --danger: #ef4444;
-    --warning: #f59e0b;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
+  --bg: #0b0e13;
+  --card: #141a22;
+  --border: #243044;
+  --primary: #3b82f6;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-    background: var(--bg);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    color: var(--text);
-    min-height: 100vh;
-    padding: 12px;
-    -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  padding: 12px;
+  padding-bottom: 40px;
+  -webkit-font-smoothing: antialiased;
 }
-.container { max-width: 1400px; margin: 0 auto; }
+.container { max-width: 1100px; margin: 0 auto; }
 
 /* Header */
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: linear-gradient(135deg, #1e293b, #0f172a);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
-    gap: 10px;
-    flex-wrap: wrap;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #111827;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  gap: 8px;
 }
 .header h1 {
-    font-size: 18px;
-    font-weight: 700;
-    background: linear-gradient(90deg, #60a5fa, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+  font-size: 17px;
+  font-weight: 700;
+  color: #93c5fd;
 }
 .header-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
 }
-.usage-badge {
-    background: #0f172a;
-    border: 1px solid var(--border);
-    padding: 5px 10px;
-    border-radius: 999px;
-    color: var(--muted);
-    font-size: 12px;
+.usage {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: var(--muted);
 }
-.usage-badge strong { color: var(--warning); }
+.usage strong { color: var(--warning); }
 
-/* Grid */
-.grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-}
-@media (min-width: 900px) {
-    .grid { grid-template-columns: 360px 1fr; }
-}
-
+/* Cards */
 .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
-
 .section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #93c5fd;
-    margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 14px;
 }
 
 /* Form */
 .form-group { margin-bottom: 12px; }
 .form-group label {
-    display: block;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 4px;
-    font-weight: 500;
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 5px;
 }
-.form-group input, .form-group select, .form-group textarea {
-    width: 100%;
-    padding: 11px 12px;
-    background: #0f172a;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 15px;
-    outline: none;
-}
-.form-group input:focus, .form-group select:focus {
-    border-color: var(--primary);
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
 }
 .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-/* Mode Toggle */
+/* Mode */
 .mode-toggle {
-    display: flex;
-    background: #0f172a;
-    border-radius: 12px;
-    padding: 4px;
-    border: 1px solid var(--border);
-    margin-bottom: 14px;
+  display: flex;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
 }
 .mode-btn {
-    flex: 1;
-    padding: 11px 0;
-    text-align: center;
-    border-radius: 9px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--muted);
-    user-select: none;
+  flex: 1;
+  padding: 12px 0;
+  text-align: center;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
 }
 .mode-btn.active {
-    background: var(--primary);
-    color: white;
+  background: var(--primary);
+  color: white;
 }
 
 /* Schedule */
 .schedule-box {
-    background: #0f172a;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 14px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
 }
 .schedule-check {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
 }
 .schedule-check input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
 }
 .schedule-fields {
-    display: none;
-    margin-top: 12px;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+  display: none;
+  margin-top: 12px;
+  gap: 10px;
 }
-.schedule-fields.show { display: grid; }
+.schedule-fields.show {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
 
 /* Buttons */
 .btn-row {
-    display: flex;
-    gap: 10px;
-    margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
 }
 .btn {
-    padding: 12px 16px;
-    border: none;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-    transition: 0.15s;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 11px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
 }
 .btn-primary {
-    background: var(--primary);
-    color: white;
-    flex: 1;
+  background: var(--primary);
+  color: white;
+  flex: 1;
 }
-.btn-primary:active { background: var(--primary-hover); }
 .btn-danger {
-    background: #7f1d1d;
-    color: #fecaca;
-}
-.btn-outline {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 6px 12px;
-    font-size: 13px;
+  background: #7f1d1d;
+  color: #fecaca;
 }
 .btn-sm {
-    padding: 6px 12px;
-    font-size: 12px;
-    border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
-/* Tables */
-.table-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-    gap: 8px;
-    flex-wrap: wrap;
+/* Meeting Cards (Mobile) */
+.meeting-card {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
 }
-.table-header h2 {
-    font-size: 15px;
-    font-weight: 600;
-    color: #93c5fd;
+.meeting-card.highlight {
+  border-color: var(--primary);
+  background: #1e3a5f;
 }
-.search-box {
-    display: flex;
-    gap: 6px;
-    width: 100%;
+.mc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 8px;
 }
-@media (min-width: 600px) {
-    .search-box { width: auto; }
+.mc-id {
+  font-weight: 700;
+  font-size: 15px;
+  color: #93c5fd;
+  word-break: break-all;
 }
-.search-box input {
-    flex: 1;
-    padding: 8px 12px;
-    background: #0f172a;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 14px;
-    min-width: 0;
+.mc-bots {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--warning);
 }
-
-.table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -4px;
-    padding: 0 4px;
+.mc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
 }
-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-    min-width: 520px;
-}
-th {
-    text-align: left;
-    padding: 10px 8px;
-    color: var(--muted);
-    font-weight: 500;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-}
-td {
-    padding: 11px 8px;
-    border-bottom: 1px solid #1e293b;
-    vertical-align: middle;
-}
-tr.highlight td {
-    background: #1e3a5f !important;
-    border-left: 3px solid var(--primary);
-}
-
 .badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    white-space: nowrap;
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
 }
 .badge-slow { background: #422006; color: #fbbf24; }
 .badge-together { background: #064e3b; color: #34d399; }
 .badge-indian { background: #1e3a5f; color: #93c5fd; }
 .badge-english { background: #064e3b; color: #6ee7b7; }
 .badge-custom { background: #4c1d95; color: #c4b5fd; }
-
+.mc-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
 .countdown {
-    font-family: ui-monospace, monospace;
-    color: var(--warning);
-    font-weight: 600;
-    font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* Search */
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.search-row input {
+  flex: 1;
+  padding: 11px 14px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  min-width: 0;
 }
 
 .log {
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: #0f172a;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    font-size: 12px;
-    color: var(--muted);
-    font-family: ui-monospace, monospace;
-    word-break: break-word;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  word-break: break-word;
 }
 .log .ok { color: var(--success); }
 .log .err { color: var(--danger); }
 .log .info { color: var(--primary); }
 
 #customBox {
-    display: none;
-    margin-top: 10px;
-    padding: 12px;
-    background: #0f172a;
-    border: 1px solid var(--border);
-    border-radius: 10px;
+  display: none;
+  margin-top: 10px;
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
-/* Mobile specific */
-@media (max-width: 600px) {
-    body { padding: 10px; }
-    .header h1 { font-size: 16px; }
-    .form-row { grid-template-columns: 1fr; }
-    .schedule-fields.show { grid-template-columns: 1fr; }
-    .btn { padding: 13px 14px; font-size: 15px; }
-    .mode-btn { padding: 12px 0; font-size: 14px; }
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px 10px;
+  font-size: 14px;
+}
+
+/* Desktop table (hidden on mobile) */
+.desktop-table { display: none; }
+@media (min-width: 768px) {
+  .desktop-table { display: block; }
+  .mobile-cards { display: none; }
+  .form-row { grid-template-columns: 1fr 1fr; }
+  .header h1 { font-size: 20px; }
+}
+@media (max-width: 767px) {
+  .form-row { grid-template-columns: 1fr; }
+  .schedule-fields.show { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
 <div class="container">
-    <div class="header">
-        <h1>⚡ Zoom Command Center</h1>
-        <div class="header-right">
-            <div class="usage-badge">Usage: <strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
-            <span id="liveTime" style="color:var(--muted);font-size:12px"></span>
-            <button class="btn btn-outline" onclick="refresh()">↻</button>
-        </div>
+
+  <div class="header">
+    <h1>⚡ Zoom Command</h1>
+    <div class="header-right">
+      <div class="usage"><strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
+      <span id="liveTime" style="color:var(--muted)"></span>
+      <button class="btn btn-outline" onclick="refresh()">↻</button>
+    </div>
+  </div>
+
+  <!-- LAUNCH CARD -->
+  <div class="card">
+    <div class="section-title">🚀 Launch / Schedule</div>
+
+    <div class="mode-toggle">
+      <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
+      <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
     </div>
 
-    <div class="grid">
-        <!-- LEFT -->
-        <div class="card">
-            <div class="section-title">🚀 Launch / Schedule</div>
-
-            <div class="mode-toggle">
-                <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
-                <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
-            </div>
-
-            <div class="form-group">
-                <label>Meeting ID</label>
-                <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
-            </div>
-            <div class="form-group">
-                <label>Passcode (optional)</label>
-                <input id="passcode" placeholder="Leave blank if none" />
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Bots</label>
-                    <input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()" />
-                </div>
-                <div class="form-group">
-                    <label>Name Type</label>
-                    <select id="nameType" onchange="toggleCustom()">
-                        <option value="indian">🇮🇳 Indian</option>
-                        <option value="english">🇺🇸 English</option>
-                        <option value="custom">✏️ Custom</option>
-                    </select>
-                </div>
-            </div>
-
-            <div id="customBox">
-                <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
-                <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
-                <div style="font-size:11px;color:var(--muted);margin-top:6px">
-                    Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong>
-                    <span id="nameStatus"></span>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Duration (minutes)</label>
-                <input type="number" id="duration" value="120" min="1" />
-            </div>
-
-            <div class="schedule-box">
-                <label class="schedule-check">
-                    <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
-                    Enable Scheduling
-                </label>
-                <div class="schedule-fields" id="scheduleFields">
-                    <div class="form-group" style="margin:0">
-                        <label>Date</label>
-                        <input type="date" id="scheduleDate" />
-                    </div>
-                    <div class="form-group" style="margin:0">
-                        <label>Time (IST)</label>
-                        <input type="time" id="scheduleTime" />
-                    </div>
-                </div>
-            </div>
-
-            <div class="btn-row">
-                <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
-                <button class="btn btn-danger" onclick="killAll()">Kill All</button>
-            </div>
-
-            <div id="msg" class="log">Ready • IST</div>
-        </div>
-
-        <!-- RIGHT -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
-            <div class="card">
-                <div class="table-header">
-                    <h2>🟢 Active Meetings</h2>
-                    <div class="search-box">
-                        <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
-                        <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Meeting</th>
-                                <th>Bots</th>
-                                <th>Started</th>
-                                <th>Mode</th>
-                                <th>Names</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyActive">
-                            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="table-header">
-                    <h2>📅 Scheduled</h2>
-                </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Meeting</th>
-                                <th>Bots</th>
-                                <th>When</th>
-                                <th>Countdown</th>
-                                <th>Mode</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodySchedule">
-                            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+    <div class="form-group">
+      <label>Meeting ID</label>
+      <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
     </div>
+    <div class="form-group">
+      <label>Passcode (optional)</label>
+      <input id="passcode" placeholder="Leave blank if none" />
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Bots</label>
+        <input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()" />
+      </div>
+      <div class="form-group">
+        <label>Name Type</label>
+        <select id="nameType" onchange="toggleCustom()">
+          <option value="indian">🇮🇳 Indian</option>
+          <option value="english">🇺🇸 English</option>
+          <option value="custom">✏️ Custom</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="customBox">
+      <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
+      <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">
+        Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong>
+        <span id="nameStatus"></span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Duration (minutes)</label>
+      <input type="number" id="duration" value="120" min="1" />
+    </div>
+
+    <div class="schedule-box">
+      <label class="schedule-check">
+        <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
+        Enable Scheduling
+      </label>
+      <div class="schedule-fields" id="scheduleFields">
+        <div class="form-group" style="margin:0">
+          <label>Date</label>
+          <input type="date" id="scheduleDate" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Time (IST)</label>
+          <input type="time" id="scheduleTime" />
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
+      <button class="btn btn-danger" onclick="killAll()">Kill All</button>
+    </div>
+
+    <div id="msg" class="log">Ready • IST</div>
+  </div>
+
+  <!-- ACTIVE -->
+  <div class="card">
+    <div class="section-title">🟢 Active Meetings</div>
+    <div class="search-row">
+      <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
+      <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
+    </div>
+    <div id="activeList" class="mobile-cards">
+      <div class="empty">No active meetings</div>
+    </div>
+  </div>
+
+  <!-- SCHEDULED -->
+  <div class="card">
+    <div class="section-title">📅 Scheduled Meetings</div>
+    <div id="scheduleList" class="mobile-cards">
+      <div class="empty">No scheduled meetings</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -872,241 +820,254 @@ let allMeetings = {};
 let allSchedules = {};
 
 function setMode(mode) {
-    currentMode = mode;
-    $('modeSlow').classList.toggle('active', mode === 'individual');
-    $('modeTogether').classList.toggle('active', mode === 'together');
+  currentMode = mode;
+  $('modeSlow').classList.toggle('active', mode === 'individual');
+  $('modeTogether').classList.toggle('active', mode === 'together');
 }
 
 function toggleSchedule() {
-    const enabled = $('enableSchedule').checked;
-    $('scheduleFields').classList.toggle('show', enabled);
-    $('startBtn').textContent = enabled ? '📅 Schedule' : '▶ Start Now';
+  const enabled = $('enableSchedule').checked;
+  $('scheduleFields').classList.toggle('show', enabled);
+  $('startBtn').textContent = enabled ? '📅 Schedule' : '▶ Start Now';
 }
 
 function show(m, type='info') {
-    const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info';
-    msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`;
+  const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info';
+  msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`;
 }
 
 function toggleCustom() {
-    customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
-    updCount();
+  customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
+  updCount();
 }
 
 function updCount() {
-    const bots = parseInt(botCount.value) || 0;
-    const names = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-    $('nameCount').textContent = names.length;
-    $('needCount').textContent = bots;
-    const st = $('nameStatus');
-    if (nameType.value !== 'custom') { st.innerHTML = ''; return; }
-    st.innerHTML = names.length >= bots ? ' <span style="color:#10b981">✅</span>' : ` <span style="color:#ef4444">❌ ${bots - names.length} more</span>`;
+  const bots = parseInt(botCount.value) || 0;
+  const names = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  $('nameCount').textContent = names.length;
+  $('needCount').textContent = bots;
+  const st = $('nameStatus');
+  if (nameType.value !== 'custom') { st.innerHTML = ''; return; }
+  st.innerHTML = names.length >= bots ? ' <span style="color:#10b981">✅</span>' : ` <span style="color:#ef4444">❌ ${bots-names.length} more</span>`;
 }
 customNames.addEventListener('input', updCount);
 
 function updateClock() {
-    liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'}) + ' IST';
+  liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
 }
 setInterval(updateClock, 1000);
 updateClock();
 
 function formatCountdown(iso) {
-    try {
-        const target = new Date(iso);
-        const now = new Date();
-        let diff = Math.floor((target - now) / 1000);
-        if (diff <= 0) return 'Triggering...';
-        const h = Math.floor(diff / 3600);
-        const m = Math.floor((diff % 3600) / 60);
-        const s = diff % 60;
-        if (h > 0) return `${h}h ${m}m ${s}s`;
-        return `${m}m ${s}s`;
-    } catch { return '-'; }
+  try {
+    const target = new Date(iso);
+    const now = new Date();
+    let diff = Math.floor((target - now) / 1000);
+    if (diff <= 0) return 'Triggering...';
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  } catch { return '-'; }
 }
 
 function renderActive(meetings) {
-    allMeetings = meetings;
-    const search = ($('searchMeeting').value || '').trim().toLowerCase();
-    let filtered = Object.entries(meetings);
-    if (search) filtered = filtered.filter(([m]) => m.toLowerCase().includes(search));
+  allMeetings = meetings;
+  const search = ($('searchMeeting').value || '').trim().toLowerCase();
+  let filtered = Object.entries(meetings);
+  if (search) filtered = filtered.filter(([m]) => m.toLowerCase().includes(search));
 
-    if (!filtered.length) {
-        tbodyActive.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>';
-        return;
-    }
+  if (!filtered.length) {
+    activeList.innerHTML = '<div class="empty">No active meetings</div>';
+    return;
+  }
 
-    let idx = 0;
-    tbodyActive.innerHTML = filtered.map(([meeting, m]) => {
-        idx++;
-        const bots = m.total_bots || 0;
-        const type = m.name_type || 'indian';
-        const mode = m.join_mode || 'individual';
-        const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
-        const isHighlight = search && meeting.toLowerCase().includes(search);
-        return `<tr class="${isHighlight ? 'highlight' : ''}">
-            <td>${idx}</td>
-            <td style="font-weight:600;color:#93c5fd">${meeting}</td>
-            <td><strong style="color:#fbbf24">${bots}</strong></td>
-            <td>${startTime}</td>
-            <td><span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span></td>
-            <td><span class="badge badge-${type}">${type}</span></td>
-            <td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td>
-        </tr>`;
-    }).join('');
+  activeList.innerHTML = filtered.map(([meeting, m]) => {
+    const bots = m.total_bots || 0;
+    const type = m.name_type || 'indian';
+    const mode = m.join_mode || 'individual';
+    const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+    const isHighlight = search && meeting.toLowerCase().includes(search);
+    return `
+      <div class="meeting-card ${isHighlight ? 'highlight' : ''}">
+        <div class="mc-top">
+          <div class="mc-id">${meeting}</div>
+          <div class="mc-bots">${bots}</div>
+        </div>
+        <div class="mc-meta">
+          <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
+          <span class="badge badge-${type}">${type}</span>
+        </div>
+        <div class="mc-bottom">
+          <span>Started: ${startTime}</span>
+          <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderSchedules(schedules) {
-    allSchedules = schedules;
-    const entries = Object.entries(schedules);
-    if (!entries.length) {
-        tbodySchedule.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';
-        return;
-    }
+  allSchedules = schedules;
+  const entries = Object.entries(schedules);
+  if (!entries.length) {
+    scheduleList.innerHTML = '<div class="empty">No scheduled meetings</div>';
+    return;
+  }
 
-    let idx = 0;
-    tbodySchedule.innerHTML = entries.map(([sid, s]) => {
-        idx++;
-        const when = new Date(s.schedule_at).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'});
-        return `<tr>
-            <td>${idx}</td>
-            <td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
-            <td><strong style="color:#fbbf24">${s.bot_count}</strong></td>
-            <td>${when}</td>
-            <td class="countdown" id="cd-${sid}">${formatCountdown(s.schedule_at)}</td>
-            <td><span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span></td>
-            <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td>
-        </tr>`;
-    }).join('');
+  scheduleList.innerHTML = entries.map(([sid, s]) => {
+    const when = new Date(s.schedule_at).toLocaleString('en-IN', {
+      timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+    });
+    return `
+      <div class="meeting-card">
+        <div class="mc-top">
+          <div class="mc-id">${s.meeting_code}</div>
+          <div class="mc-bots">${s.bot_count}</div>
+        </div>
+        <div class="mc-meta">
+          <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
+          <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
+        </div>
+        <div class="mc-bottom">
+          <div>
+            <div>${when}</div>
+            <div class="countdown" id="cd-${sid}">${formatCountdown(s.schedule_at)}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function filterMeetings() { renderActive(allMeetings); }
 
 async function refresh() {
-    try {
-        const r = await fetch(API + '/status');
-        const d = await r.json();
-        const workers = d.workers || {};
-        let total = 0, free = 0;
-        Object.values(workers).forEach(w => {
-            total += w.max_capacity || 0;
-            free += w.free_capacity || 0;
-        });
-        totalCap.textContent = total - free;
-        totalCapMax.textContent = total;
-        renderActive(d.meetings || {});
-        renderSchedules(d.schedules || {});
-        show('Refreshed', 'ok');
-    } catch (e) {
-        show(e.message || 'Failed', 'err');
-    }
+  try {
+    const r = await fetch(API + '/status');
+    const d = await r.json();
+    const workers = d.workers || {};
+    let total = 0, free = 0;
+    Object.values(workers).forEach(w => {
+      total += w.max_capacity || 0;
+      free += w.free_capacity || 0;
+    });
+    totalCap.textContent = total - free;
+    totalCapMax.textContent = total;
+    renderActive(d.meetings || {});
+    renderSchedules(d.schedules || {});
+    show('Refreshed', 'ok');
+  } catch (e) {
+    show(e.message || 'Failed', 'err');
+  }
 }
 
 setInterval(() => {
-    Object.keys(allSchedules).forEach(sid => {
-        const el = document.getElementById('cd-' + sid);
-        if (el) el.textContent = formatCountdown(allSchedules[sid].schedule_at);
-    });
+  Object.keys(allSchedules).forEach(sid => {
+    const el = document.getElementById('cd-' + sid);
+    if (el) el.textContent = formatCountdown(allSchedules[sid].schedule_at);
+  });
 }, 1000);
 
 async function handleStart() {
-    const meeting = meetingId.value.trim().replace(/\s/g, '');
-    const pass = passcode.value.trim();
-    const bots = parseInt(botCount.value) || 10;
-    const dur = parseInt(duration.value) || 120;
-    const type = nameType.value;
-    let custom = null;
-    if (type === 'custom') {
-        custom = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-        if (custom.length < bots) return show('Need more custom names', 'err');
-    }
-    if (!meeting) return show('Meeting ID required', 'err');
+  const meeting = meetingId.value.trim().replace(/\s/g, '');
+  const pass = passcode.value.trim();
+  const bots = parseInt(botCount.value) || 10;
+  const dur = parseInt(duration.value) || 120;
+  const type = nameType.value;
+  let custom = null;
+  if (type === 'custom') {
+    custom = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+    if (custom.length < bots) return show('Need more custom names', 'err');
+  }
+  if (!meeting) return show('Meeting ID required', 'err');
 
-    const isSchedule = $('enableSchedule').checked;
+  const isSchedule = $('enableSchedule').checked;
 
-    if (isSchedule) {
-        const date = $('scheduleDate').value;
-        const time = $('scheduleTime').value;
-        if (!date || !time) return show('Select date & time', 'err');
-        const scheduleAt = `${date}T${time}:00`;
-        try {
-            show('Scheduling...', 'info');
-            const r = await fetch(API + '/api/schedule', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    meeting_code: meeting, passcode: pass, bot_count: bots,
-                    duration_minutes: dur, name_type: type, custom_names: custom,
-                    join_mode: currentMode, schedule_at: scheduleAt
-                })
-            });
-            const d = await r.json();
-            if (r.ok) {
-                show(d.message || 'Scheduled!', 'ok');
-                $('enableSchedule').checked = false;
-                toggleSchedule();
-                setTimeout(refresh, 500);
-            } else show(d.detail || 'Failed', 'err');
-        } catch (e) { show(e.message, 'err'); }
-    } else {
-        try {
-            show(`Starting ${bots} bots...`, 'info');
-            const r = await fetch(API + '/api/start-bots', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    meeting_code: meeting, passcode: pass, bot_count: bots,
-                    duration_minutes: dur, name_type: type, custom_names: custom,
-                    join_mode: currentMode
-                })
-            });
-            const d = await r.json();
-            if (r.ok) {
-                show(d.message || 'Started!', 'ok');
-                setTimeout(refresh, 500);
-            } else show(d.detail || 'Failed', 'err');
-        } catch (e) { show(e.message, 'err'); }
-    }
+  if (isSchedule) {
+    const date = $('scheduleDate').value;
+    const time = $('scheduleTime').value;
+    if (!date || !time) return show('Select date & time', 'err');
+    const scheduleAt = `${date}T${time}:00`;
+    try {
+      show('Scheduling...', 'info');
+      const r = await fetch(API + '/api/schedule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          meeting_code: meeting, passcode: pass, bot_count: bots,
+          duration_minutes: dur, name_type: type, custom_names: custom,
+          join_mode: currentMode, schedule_at: scheduleAt
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        show(d.message || 'Scheduled!', 'ok');
+        $('enableSchedule').checked = false;
+        toggleSchedule();
+        setTimeout(refresh, 500);
+      } else show(d.detail || 'Failed', 'err');
+    } catch (e) { show(e.message, 'err'); }
+  } else {
+    try {
+      show(`Starting ${bots} bots...`, 'info');
+      const r = await fetch(API + '/api/start-bots', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          meeting_code: meeting, passcode: pass, bot_count: bots,
+          duration_minutes: dur, name_type: type, custom_names: custom,
+          join_mode: currentMode
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        show(d.message || 'Started!', 'ok');
+        setTimeout(refresh, 500);
+      } else show(d.detail || 'Failed', 'err');
+    } catch (e) { show(e.message, 'err'); }
+  }
 }
 
 async function killMeeting(meeting) {
-    if (!confirm(`Kill all bots for ${meeting}?`)) return;
-    try {
-        const r = await fetch(API + '/api/terminate', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({meeting_code: meeting})
-        });
-        const d = await r.json();
-        if (r.ok) { show(d.message || 'Killed', 'ok'); setTimeout(refresh, 500); }
-        else show(d.detail || 'Failed', 'err');
-    } catch (e) { show(e.message, 'err'); }
+  if (!confirm(`Kill all bots for ${meeting}?`)) return;
+  try {
+    const r = await fetch(API + '/api/terminate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({meeting_code: meeting})
+    });
+    const d = await r.json();
+    if (r.ok) { show(d.message || 'Killed', 'ok'); setTimeout(refresh, 500); }
+    else show(d.detail || 'Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
 }
 
 async function killBySearch() {
-    const meeting = $('searchMeeting').value.trim().replace(/\s/g, '');
-    if (!meeting) return show('Enter Meeting ID', 'err');
-    await killMeeting(meeting);
+  const meeting = $('searchMeeting').value.trim().replace(/\s/g, '');
+  if (!meeting) return show('Enter Meeting ID', 'err');
+  await killMeeting(meeting);
 }
 
 async function killAll() {
-    if (!confirm('Kill ALL active meetings?')) return;
-    try {
-        const r = await fetch(API + '/api/terminate', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({})
-        });
-        const d = await r.json();
-        if (r.ok) { show('All killed', 'ok'); setTimeout(refresh, 500); }
-        else show(d.detail || 'Failed', 'err');
-    } catch (e) { show(e.message, 'err'); }
+  if (!confirm('Kill ALL active meetings?')) return;
+  try {
+    const r = await fetch(API + '/api/terminate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (r.ok) { show('All killed', 'ok'); setTimeout(refresh, 500); }
+    else show(d.detail || 'Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
 }
 
 async function deleteSchedule(sid) {
-    if (!confirm('Cancel this schedule?')) return;
-    try {
-        const r = await fetch(API + '/api/schedule/' + sid, {method: 'DELETE'});
-        if (r.ok) { show('Cancelled', 'ok'); setTimeout(refresh, 400); }
-        else show('Failed', 'err');
-    } catch (e) { show(e.message, 'err'); }
+  if (!confirm('Cancel this schedule?')) return;
+  try {
+    const r = await fetch(API + '/api/schedule/' + sid, {method: 'DELETE'});
+    if (r.ok) { show('Cancelled', 'ok'); setTimeout(refresh, 400); }
+    else show('Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
 }
 
 setInterval(refresh, 5000);
