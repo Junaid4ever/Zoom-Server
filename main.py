@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – FINAL + SHUTDOWN
+# ZOOM BOT CENTRAL – FINAL FIXED
 # ============================================
 import os
 import uuid
@@ -63,15 +63,13 @@ async def disconnect(sid):
             tasks_to_remove = [tid for tid, t in running_tasks.items() if t.get("worker_id") == wid]
             for tid in tasks_to_remove:
                 meeting = running_tasks[tid].get("meeting_code")
-                if meeting and meeting in meeting_groups and tid in meeting_groups[meeting]:
-                    meeting_groups[meeting].remove(tid)
-                    if not meeting_groups[meeting]:
-                        del meeting_groups[meeting]
+                if meeting and meeting in meeting_groups and tid in meeting_groups[meeting].get("task_ids", []):
+                    meeting_groups[meeting]["task_ids"].remove(tid)
                 del running_tasks[tid]
             workers[wid]["free_capacity"] = workers[wid]["max_capacity"]
             workers[wid]["sid"] = None
             workers[wid]["last_seen"] = now_ist().isoformat()
-            print(f"[SIO] Worker {wid} disconnected")
+            print(f"[SIO] Worker {wid} disconnected → Capacity restored")
             break
 
 @sio.event
@@ -93,14 +91,19 @@ async def task_completed(sid, data):
     tid = data.get("task_id")
     if tid and tid in running_tasks:
         wid = running_tasks[tid].get("worker_id")
+        bot_count = running_tasks[tid].get("bot_count", 0)
+        # Only free capacity – DO NOT reduce meeting total_bots
         if wid and wid in workers:
-            workers[wid]["free_capacity"] = min(workers[wid]["max_capacity"], workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0))
+            workers[wid]["free_capacity"] = min(
+                workers[wid]["max_capacity"],
+                workers[wid].get("free_capacity", 0) + bot_count
+            )
         meeting = running_tasks[tid].get("meeting_code")
-        if meeting and meeting in meeting_groups and tid in meeting_groups[meeting]:
-            meeting_groups[meeting].remove(tid)
-            if not meeting_groups[meeting]:
-                del meeting_groups[meeting]
+        if meeting and meeting in meeting_groups:
+            if tid in meeting_groups[meeting].get("task_ids", []):
+                meeting_groups[meeting]["task_ids"].remove(tid)
         del running_tasks[tid]
+        print(f"[SIO] Task completed: {tid} (capacity freed, meeting count unchanged)")
 
 @app.get("/health")
 async def health():
@@ -132,7 +135,12 @@ async def update_session(request: Request):
             raise HTTPException(400, "Invalid session JSON. Must contain 'cookies'")
         with open("zoom_session.json", "w") as f:
             json.dump(data, f, indent=2)
-        session_status.update({"logged_in": True, "last_checked": now_ist().isoformat(), "message": "Session updated successfully ✓", "login_in_progress": False})
+        session_status.update({
+            "logged_in": True,
+            "last_checked": now_ist().isoformat(),
+            "message": "Session updated successfully ✓",
+            "login_in_progress": False
+        })
         print("✅ Session JSON updated successfully")
         return {"success": True, "message": "Session saved successfully"}
     except Exception as e:
@@ -144,15 +152,27 @@ async def status():
     connected_workers = {wid: info for wid, info in workers.items() if info.get("sid") is not None}
     total_free = sum(w.get("free_capacity", 0) for w in connected_workers.values())
     total_capacity = sum(w.get("max_capacity", 0) for w in connected_workers.values())
+
     meetings = {}
-    for tid, task in list(running_tasks.items()):
-        meeting = task.get("meeting_code", "unknown")
-        if meeting not in meetings:
-            meetings[meeting] = {"meeting_code": meeting, "total_bots": 0, "name_type": task.get("name_type", "indian"), "started_at": task.get("started_at"), "duration_minutes": task.get("duration_minutes", 120), "join_mode": task.get("join_mode", "individual")}
-        meetings[meeting]["total_bots"] += task.get("bot_count", 0)
-        if task.get("started_at") and (meetings[meeting]["started_at"] is None or task["started_at"] > meetings[meeting]["started_at"]):
-            meetings[meeting]["started_at"] = task["started_at"]
-    return {"workers": connected_workers, "total_capacity": total_capacity, "total_free_capacity": total_free, "meetings": meetings, "schedules": scheduled_tasks, "session": session_status, "timestamp": now_ist().isoformat()}
+    for meeting, info in meeting_groups.items():
+        meetings[meeting] = {
+            "meeting_code": meeting,
+            "total_bots": info.get("total_bots", 0),
+            "name_type": info.get("name_type", "indian"),
+            "started_at": info.get("started_at"),
+            "join_mode": info.get("join_mode", "individual")
+        }
+
+    return {
+        "workers": connected_workers,
+        "total_capacity": total_capacity,
+        "total_free_capacity": total_free,
+        "meetings": meetings,
+        "schedules": scheduled_tasks,
+        "session": session_status,
+        "timestamp": now_ist().isoformat(),
+        "connected_workers_count": len(connected_workers)
+    }
 
 @app.post("/api/start-bots")
 async def start_bots(req: StartBotRequest):
@@ -160,43 +180,109 @@ async def start_bots(req: StartBotRequest):
         raise HTTPException(400, "No session file. Please upload zoom_session.json first.")
     if req.bot_count < 1:
         raise HTTPException(400, "bot_count must be >= 1")
+
     meeting = req.meeting_code.strip().replace(" ", "")
     if not meeting:
         raise HTTPException(400, "meeting_code required")
+
     remaining = req.bot_count
     assigned = []
     connected = {wid: info for wid, info in workers.items() if info.get("sid")}
     sorted_workers = sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True)
+
+    name_offset = 0
+
     for wid, info in sorted_workers:
-        if remaining <= 0: break
+        if remaining <= 0:
+            break
         free = int(info.get("free_capacity", 0))
-        if free <= 0: continue
+        if free <= 0:
+            continue
+
         give = min(free, remaining)
         task_id = str(uuid.uuid4())[:8]
-        payload = {"task_id": task_id, "meeting_code": meeting, "passcode": req.passcode or "", "bot_count": give, "duration_minutes": req.duration_minutes, "name_type": req.name_type or "indian", "custom_names": req.custom_names, "join_mode": req.join_mode or "individual"}
+
+        custom_slice = None
+        if req.custom_names and req.name_type == "custom":
+            custom_slice = req.custom_names[name_offset : name_offset + give]
+            name_offset += give
+
+        payload = {
+            "task_id": task_id,
+            "meeting_code": meeting,
+            "passcode": req.passcode or "",
+            "bot_count": give,
+            "duration_minutes": req.duration_minutes,
+            "name_type": req.name_type or "indian",
+            "custom_names": custom_slice,
+            "join_mode": req.join_mode or "individual"
+        }
+
         await sio.emit("new_task", payload, to=info["sid"])
-        running_tasks[task_id] = {"task_id": task_id, "meeting_code": meeting, "bot_count": give, "worker_id": wid, "name_type": payload["name_type"], "duration_minutes": req.duration_minutes, "started_at": now_ist().isoformat(), "join_mode": req.join_mode or "individual"}
-        if meeting not in meeting_groups: meeting_groups[meeting] = []
-        meeting_groups[meeting].append(task_id)
+
+        running_tasks[task_id] = {
+            "task_id": task_id,
+            "meeting_code": meeting,
+            "bot_count": give,
+            "worker_id": wid,
+            "name_type": payload["name_type"],
+            "duration_minutes": req.duration_minutes,
+            "started_at": now_ist().isoformat(),
+            "join_mode": req.join_mode or "individual"
+        }
+
+        if meeting not in meeting_groups:
+            meeting_groups[meeting] = {
+                "task_ids": [],
+                "total_bots": 0,
+                "name_type": payload["name_type"],
+                "join_mode": req.join_mode or "individual",
+                "started_at": now_ist().isoformat()
+            }
+
+        meeting_groups[meeting]["task_ids"].append(task_id)
+        meeting_groups[meeting]["total_bots"] += give
+
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
         remaining -= give
+
     if not assigned:
         raise HTTPException(503, "No free capacity or no connected workers.")
-    return {"success": True, "message": f"Started {req.bot_count - remaining} bots for {meeting}", "assigned": assigned, "remaining_unassigned": remaining}
+
+    return {
+        "success": True,
+        "message": f"Started {req.bot_count - remaining} bots for {meeting}",
+        "assigned": assigned,
+        "remaining_unassigned": remaining
+    }
 
 @app.post("/api/schedule")
 async def create_schedule(req: ScheduleRequest):
     try:
         schedule_time = datetime.fromisoformat(req.schedule_at.replace("Z", "+00:00"))
-        if schedule_time.tzinfo is None: schedule_time = schedule_time.replace(tzinfo=IST)
-        else: schedule_time = schedule_time.astimezone(IST)
+        if schedule_time.tzinfo is None:
+            schedule_time = schedule_time.replace(tzinfo=IST)
+        else:
+            schedule_time = schedule_time.astimezone(IST)
     except Exception as e:
         raise HTTPException(400, f"Invalid schedule_at: {e}")
     if schedule_time <= now_ist():
         raise HTTPException(400, "Schedule time must be in future")
+
     sid = str(uuid.uuid4())[:8]
-    scheduled_tasks[sid] = {"schedule_id": sid, "meeting_code": req.meeting_code.strip().replace(" ", ""), "passcode": req.passcode or "", "bot_count": req.bot_count, "duration_minutes": req.duration_minutes, "name_type": req.name_type or "indian", "custom_names": req.custom_names, "join_mode": req.join_mode or "individual", "schedule_at": schedule_time.isoformat(), "created_at": now_ist().isoformat()}
+    scheduled_tasks[sid] = {
+        "schedule_id": sid,
+        "meeting_code": req.meeting_code.strip().replace(" ", ""),
+        "passcode": req.passcode or "",
+        "bot_count": req.bot_count,
+        "duration_minutes": req.duration_minutes,
+        "name_type": req.name_type or "indian",
+        "custom_names": req.custom_names,
+        "join_mode": req.join_mode or "individual",
+        "schedule_at": schedule_time.isoformat(),
+        "created_at": now_ist().isoformat()
+    }
     return {"success": True, "schedule_id": sid, "message": "Scheduled successfully"}
 
 @app.delete("/api/schedule/{schedule_id}")
@@ -211,15 +297,18 @@ async def terminate(req: Optional[TerminateRequest] = None):
     if req and req.meeting_code:
         meeting = req.meeting_code.strip().replace(" ", "")
         to_kill = [tid for tid, t in running_tasks.items() if t.get("meeting_code") == meeting]
-        if not to_kill: raise HTTPException(404, f"No active tasks for {meeting}")
         for tid in to_kill:
             wid = running_tasks[tid].get("worker_id")
             if wid in workers and workers[wid].get("sid"):
                 await sio.emit("terminate", {"task_id": tid}, to=workers[wid]["sid"])
             if wid and wid in workers:
-                workers[wid]["free_capacity"] = min(workers[wid]["max_capacity"], workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0))
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
             del running_tasks[tid]
-        if meeting in meeting_groups: del meeting_groups[meeting]
+        if meeting in meeting_groups:
+            del meeting_groups[meeting]
         return {"success": True, "message": f"Meeting {meeting} terminated"}
     else:
         for tid in list(running_tasks.keys()):
@@ -227,7 +316,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
             if wid in workers and workers[wid].get("sid"):
                 await sio.emit("terminate", {"task_id": tid}, to=workers[wid]["sid"])
             if wid and wid in workers:
-                workers[wid]["free_capacity"] = min(workers[wid]["max_capacity"], workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0))
+                workers[wid]["free_capacity"] = min(
+                    workers[wid]["max_capacity"],
+                    workers[wid].get("free_capacity", 0) + running_tasks[tid].get("bot_count", 0)
+                )
         running_tasks.clear()
         meeting_groups.clear()
         return {"success": True, "message": "All tasks terminated"}
@@ -235,12 +327,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
 @app.post("/api/shutdown")
 async def shutdown_server():
     print("🛑 SHUTDOWN requested from dashboard")
-    # Notify all workers to shutdown
     for wid, info in workers.items():
         if info.get("sid"):
             await sio.emit("shutdown", {"message": "Server is shutting down"}, to=info["sid"])
     await asyncio.sleep(1.5)
-    # Kill the process
     os.kill(os.getpid(), signal.SIGTERM)
     return {"success": True, "message": "Shutdown signal sent"}
 
@@ -252,20 +342,37 @@ async def schedule_checker():
         for sid, info in list(scheduled_tasks.items()):
             try:
                 st = datetime.fromisoformat(info["schedule_at"])
-                if st.tzinfo is None: st = st.replace(tzinfo=IST)
-                if now >= st: to_run.append(sid)
-            except: continue
+                if st.tzinfo is None:
+                    st = st.replace(tzinfo=IST)
+                if now >= st:
+                    to_run.append(sid)
+            except:
+                continue
         for sid in to_run:
             info = scheduled_tasks.pop(sid)
-            req = StartBotRequest(meeting_code=info["meeting_code"], passcode=info["passcode"], bot_count=info["bot_count"], duration_minutes=info["duration_minutes"], name_type=info["name_type"], custom_names=info["custom_names"], join_mode=info["join_mode"])
-            try: await start_bots(req)
-            except Exception as e: print(f"[SCHEDULE] Failed: {e}")
+            req = StartBotRequest(
+                meeting_code=info["meeting_code"],
+                passcode=info["passcode"],
+                bot_count=info["bot_count"],
+                duration_minutes=info["duration_minutes"],
+                name_type=info["name_type"],
+                custom_names=info["custom_names"],
+                join_mode=info["join_mode"]
+            )
+            try:
+                await start_bots(req)
+            except Exception as e:
+                print(f"[SCHEDULE] Failed: {e}")
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(schedule_checker())
     if os.path.exists("zoom_session.json"):
-        session_status.update({"logged_in": True, "message": "Session file present", "last_checked": now_ist().isoformat()})
+        session_status.update({
+            "logged_in": True,
+            "message": "Session file present",
+            "last_checked": now_ist().isoformat()
+        })
     print("✅ Server started")
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
@@ -332,7 +439,6 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
 .search-row input{flex:1;padding:10px 13px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;min-width:0}
 .log{margin-top:12px;padding:10px 12px;background:#0f172a;border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;word-break:break-word}
 .log .ok{color:var(--success)}.log .err{color:var(--danger)}.log .info{color:var(--primary)}
-#customBox{display:none;margin-top:10px;padding:12px;background:#0f172a;border:1px solid var(--border);border-radius:10px}
 .empty{text-align:center;color:var(--muted);padding:22px 10px;font-size:14px}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
 .modal{background:#1e293b;border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%}
@@ -350,7 +456,7 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
       <div id="sessionBadge" class="session-badge logged-out">Checking...</div>
       <div class="usage"><strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
       <span id="liveTime" style="color:var(--muted)"></span>
-      <button class="btn btn-outline" onclick="refresh()">↻</button>
+      <button class="btn btn-outline" onclick="refresh()">↻ Refresh</button>
       <button class="btn btn-danger btn-sm" onclick="openShutdownModal()">🛑 Shutdown</button>
     </div>
   </div>
@@ -381,18 +487,31 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
       <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="98695209590" inputmode="numeric"/></div>
       <div class="form-group"><label>Passcode (optional)</label><input id="passcode" placeholder="Leave blank if none"/></div>
       <div class="form-row">
-        <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()"/></div>
+        <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="20" min="1" max="500" oninput="updCount()"/></div>
         <div class="form-group"><label>Name Type</label>
           <select id="nameType" onchange="toggleCustom()">
-            <option value="indian">🇮🇳 Indian</option><option value="english">🇺🇸 English</option><option value="custom">✏️ Custom</option>
+            <option value="indian">🇮🇳 Indian</option>
+            <option value="english">🇺🇸 English</option>
+            <option value="custom">✏️ Custom</option>
           </select>
         </div>
       </div>
-      <div id="customBox">
-        <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
-        <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong> <span id="nameStatus"></span></div>
+
+      <div id="customBox" style="display:none;margin-top:12px;padding:14px;background:#0f172a;border:1px solid var(--border);border-radius:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:600;color:#93c5fd;">✏️ Custom Names</label>
+          <span style="font-size:11px;color:var(--muted);">One name per line</span>
+        </div>
+        <textarea id="customNames" rows="6" placeholder="Rahul Sharma&#10;Priya Verma&#10;Aarav Singh&#10;..." style="width:100%;padding:12px;background:#111827;border:1px solid #334155;border-radius:10px;color:var(--text);font-size:13px;font-family:ui-monospace,monospace;resize:vertical;line-height:1.5;"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;">
+          <div style="color:var(--muted);">
+            Names: <strong id="nameCount" style="color:#e2e8f0;">0</strong> &nbsp;|&nbsp; Need: <strong id="needCount" style="color:#e2e8f0;">20</strong>
+            <span id="nameStatus"></span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('customNames').value='';updCount();">Clear</button>
+        </div>
       </div>
+
       <div class="form-group"><label>Duration (minutes)</label><input type="number" id="duration" value="120" min="1"/></div>
       <div class="schedule-box">
         <label class="schedule-check"><input type="checkbox" id="enableSchedule" onchange="toggleSchedule()"/> Enable Scheduling</label>
@@ -417,23 +536,26 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
         </div>
         <div id="activeListMobile" class="mobile-only"><div class="empty">No active meetings</div></div>
         <div class="desktop-only table-wrap">
-          <table><thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th></tr></thead>
-          <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr></tbody></table>
+          <table>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th></tr></thead>
+            <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr></tbody>
+          </table>
         </div>
       </div>
       <div class="card">
         <div class="section-title">📅 Scheduled Meetings</div>
         <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled meetings</div></div>
         <div class="desktop-only table-wrap">
-          <table><thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th></tr></thead>
-          <tbody id="tbodySchedule"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr></tbody></table>
+          <table>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th></tr></thead>
+            <tbody id="tbodySchedule"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Shutdown Modal -->
 <div class="modal-overlay" id="shutdownModal">
   <div class="modal">
     <h3>🛑 Shutdown Server?</h3>
@@ -454,25 +576,70 @@ function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='i
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
 function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
 function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
-function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅</span>':` <span style="color:#ef4444">❌ ${b-n.length} more</span>`}
+function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅ Ready</span>':` <span style="color:#ef4444">❌ ${b-n.length} more needed</span>`}
 customNames.addEventListener('input',updCount);
 function updateClock(){liveTime.textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'}
 setInterval(updateClock,1000);updateClock();
 function formatCountdown(iso){try{const t=new Date(iso),n=new Date();let d=Math.floor((t-n)/1000);if(d<=0)return'Triggering...';const h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;return h>0?`${h}h ${m}m ${s}s`:`${m}m ${s}s`}catch{return'-'}}
+
 function toggleSessionBox(){const b=$('sessionEditBox'),btn=$('toggleSessionBtn');if(b.style.display==='none'){b.style.display='block';btn.textContent='✕ Close'}else{b.style.display='none';btn.textContent='✏️ Update Session'}}
 function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value=''}
 function updateSessionUI(s){const badge=$('sessionBadge'),st=$('sessionStatusText');isLoggedIn=!!s.logged_in;if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st){st.textContent=s.message||'Session active';st.style.color='#34d399'}}else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st){st.textContent=s.message||'No session file';st.style.color='#fca5a5'}}}
+
 async function saveSession(){const raw=$('sessionJson').value.trim();if(!raw)return show('Please paste session JSON','err');let data;try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON format','err')}if(!data.cookies)return show('JSON must contain "cookies"','err');try{show('Saving session...','info');const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();if(r.ok){show('✅ Session saved successfully!','ok');$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value='';if($('sessionStatusText')){$('sessionStatusText').textContent='Session updated just now ✓';$('sessionStatusText').style.color='#34d399'}setTimeout(refresh,600)}else show(d.detail||'Save failed','err')}catch(e){show(e.message,'err')}}
+
 function renderActive(meetings){allMeetings=meetings;const search=($('searchMeeting').value||'').trim().toLowerCase();let filtered=Object.entries(meetings);if(search)filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));if(!filtered.length){activeListMobile.innerHTML='<div class="empty">No active meetings</div>';tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>';return}
 activeListMobile.innerHTML=filtered.map(([meeting,m])=>{const bots=m.total_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-',isH=search&&meeting.toLowerCase().includes(search);return`<div class="meeting-card ${isH?'highlight':''}"><div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${bots}</div></div><div class="mc-meta"><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span><span class="badge badge-${type}">${type}</span></div><div class="mc-bottom"><span>Started: ${startTime}</span><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></div></div>`}).join('');
 let idx=0;tbodyActive.innerHTML=filtered.map(([meeting,m])=>{idx++;const bots=m.total_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-',isH=search&&meeting.toLowerCase().includes(search);return`<tr class="${isH?'highlight':''}"><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${meeting}</td><td><strong style="color:#fbbf24">${bots}</strong></td><td>${startTime}</td><td><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span></td><td><span class="badge badge-${type}">${type}</span></td><td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td></tr>`}).join('')}
+
 function renderSchedules(schedules){allSchedules=schedules;const entries=Object.entries(schedules);if(!entries.length){scheduleListMobile.innerHTML='<div class="empty">No scheduled meetings</div>';tbodySchedule.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';return}
 scheduleListMobile.innerHTML=entries.map(([sid,s])=>{const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});return`<div class="meeting-card"><div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div><div class="mc-meta"><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span><span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div><div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`}).join('');
 let idx=0;tbodySchedule.innerHTML=entries.map(([sid,s])=>{idx++;const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});return`<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td><td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td><td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td><td><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span></td><td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('')}
+
 function filterMeetings(){renderActive(allMeetings)}
-async function refresh(){try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);totalCap.textContent=(d.total_capacity||0)-(d.total_free_capacity||0);totalCapMax.textContent=d.total_capacity||0;renderActive(d.meetings||{});renderSchedules(d.schedules||{});show('Refreshed','ok')}catch(e){show(e.message||'Failed','err')}}
+
+async function refresh(){
+  try{
+    const r=await fetch(API+'/status');
+    const d=await r.json();
+    if(d.session) updateSessionUI(d.session);
+    const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;
+    totalCap.textContent=(d.total_capacity||0)-(d.total_free_capacity||0);
+    totalCapMax.textContent=d.total_capacity||0;
+    renderActive(d.meetings||{});
+    renderSchedules(d.schedules||{});
+    show(`Refreshed • ${connected} worker(s) connected`,'ok');
+  }catch(e){show(e.message||'Failed to refresh','err')}
+}
+
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
-async function handleStart(){if(!isLoggedIn)return show('Please upload session JSON first','err');const meeting=meetingId.value.trim().replace(/\s/g,''),pass=passcode.value.trim(),bots=parseInt(botCount.value)||10,dur=parseInt(duration.value)||120,type=nameType.value;let custom=null;if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);if(custom.length<bots)return show('Need more custom names','err')}if(!meeting)return show('Meeting ID required','err');const isSchedule=$('enableSchedule').checked;if(isSchedule){const date=$('scheduleDate').value,time=$('scheduleTime').value;if(!date||!time)return show('Select date & time','err');try{show('Scheduling...','info');const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});const d=await r.json();if(r.ok){show(d.message||'Scheduled!','ok');$('enableSchedule').checked=false;toggleSchedule();setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}else{try{show(`Starting ${bots} bots...`,'info');const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});const d=await r.json();if(r.ok){show(d.message||'Started!','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}}
+
+async function handleStart(){
+  if(!isLoggedIn) return show('Please upload session JSON first','err');
+  const meeting=meetingId.value.trim().replace(/\s/g,''),pass=passcode.value.trim(),bots=parseInt(botCount.value)||10,dur=parseInt(duration.value)||120,type=nameType.value;
+  let custom=null;
+  if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);if(custom.length<bots)return show('Need more custom names','err')}
+  if(!meeting) return show('Meeting ID required','err');
+  const isSchedule=$('enableSchedule').checked;
+  if(isSchedule){
+    const date=$('scheduleDate').value,time=$('scheduleTime').value;
+    if(!date||!time) return show('Select date & time','err');
+    try{show('Scheduling...','info');
+      const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});
+      const d=await r.json();
+      if(r.ok){show(d.message||'Scheduled!','ok');$('enableSchedule').checked=false;toggleSchedule();setTimeout(refresh,500)}
+      else show(d.detail||'Failed','err');
+    }catch(e){show(e.message,'err')}
+  }else{
+    try{show(`Starting ${bots} bots...`,'info');
+      const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});
+      const d=await r.json();
+      if(r.ok){show(d.message||'Started!','ok');setTimeout(refresh,500)}
+      else show(d.detail||'Failed','err');
+    }catch(e){show(e.message,'err')}
+  }
+}
+
 async function killMeeting(meeting){if(!confirm(`Kill all bots for ${meeting}?`))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})});const d=await r.json();if(r.ok){show(d.message||'Killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
 async function killBySearch(){const meeting=$('searchMeeting').value.trim().replace(/\s/g,'');if(!meeting)return show('Enter Meeting ID','err');await killMeeting(meeting)}
 async function killAll(){if(!confirm('Kill ALL active meetings?'))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json();if(r.ok){show('All killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
