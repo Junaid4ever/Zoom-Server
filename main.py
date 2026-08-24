@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – FULL FINAL (Session JSON Upload)
+# ZOOM BOT CENTRAL – FULL FINAL
 # ============================================
 import os
 import uuid
@@ -167,7 +167,7 @@ async def update_session(request: Request):
         session_status.update({
             "logged_in": True,
             "last_checked": now_ist().isoformat(),
-            "message": "Session updated manually ✓",
+            "message": "Session updated successfully ✓",
             "login_in_progress": False
         })
         print("✅ Session JSON updated successfully")
@@ -398,302 +398,123 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <title>Zoom Command Center</title>
 <style>
 :root {
-  --bg: #0b0e13;
-  --card: #141a22;
-  --border: #243044;
-  --primary: #3b82f6;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --success: #10b981;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
+  --bg: #0b0e13; --card: #141a22; --border: #243044; --primary: #3b82f6;
+  --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+  --text: #e2e8f0; --muted: #94a3b8;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
   background: var(--bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  color: var(--text);
-  min-height: 100vh;
-  padding: 12px;
-  padding-bottom: 40px;
+  color: var(--text); min-height: 100vh; padding: 12px; padding-bottom: 40px;
 }
 .container { max-width: 1400px; margin: 0 auto; }
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #111827;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  gap: 10px;
-  flex-wrap: wrap;
+  display: flex; justify-content: space-between; align-items: center;
+  background: #111827; border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
 }
 .header h1 { font-size: 18px; font-weight: 700; color: #93c5fd; }
 .header-right { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 .usage {
-  background: #0f172a;
-  border: 1px solid var(--border);
-  padding: 5px 12px;
-  border-radius: 20px;
-  color: var(--muted);
+  background: #0f172a; border: 1px solid var(--border); padding: 5px 12px;
+  border-radius: 20px; color: var(--muted);
 }
 .usage strong { color: var(--warning); }
 .session-badge {
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
 }
 .session-badge.logged-in { background: #064e3b; color: #34d399; }
 .session-badge.logged-out { background: #7f1d1d; color: #fca5a5; }
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-@media (min-width: 1000px) {
-  .grid { grid-template-columns: 380px 1fr; }
-}
+.grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 1000px) { .grid { grid-template-columns: 380px 1fr; } }
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
 }
-.section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #93c5fd;
-  margin-bottom: 14px;
-}
+.section-title { font-size: 14px; font-weight: 600; color: #93c5fd; margin-bottom: 14px; }
 .form-group { margin-bottom: 12px; }
-.form-group label {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 5px;
-}
+.form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
 .form-group input, .form-group select, .form-group textarea {
-  width: 100%;
-  padding: 11px 13px;
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
+  width: 100%; padding: 11px 13px; background: #0f172a; border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px; outline: none;
 }
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode-toggle {
-  display: flex;
-  background: #0f172a;
-  border-radius: 12px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  margin-bottom: 14px;
+  display: flex; background: #0f172a; border-radius: 12px; padding: 4px;
+  border: 1px solid var(--border); margin-bottom: 14px;
 }
 .mode-btn {
-  flex: 1;
-  padding: 11px 0;
-  text-align: center;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
+  flex: 1; padding: 11px 0; text-align: center; border-radius: 9px;
+  font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
 }
 .mode-btn.active { background: var(--primary); color: white; }
 .schedule-box {
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 14px;
+  background: #0f172a; border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px; margin-bottom: 14px;
 }
-.schedule-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  font-weight: 500;
-}
-.schedule-check input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--primary);
-}
-.schedule-fields {
-  display: none;
-  margin-top: 12px;
-  gap: 10px;
-}
-.schedule-fields.show {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.btn-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
+.schedule-check { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.schedule-check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.schedule-fields { display: none; margin-top: 12px; gap: 10px; }
+.schedule-fields.show { display: grid; grid-template-columns: 1fr 1fr; }
+.btn-row { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 .btn {
-  padding: 12px 16px;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
+  padding: 12px 16px; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .btn-primary { background: var(--primary); color: white; flex: 1; }
 .btn-danger { background: #7f1d1d; color: #fecaca; }
 .btn-success { background: #065f46; color: #6ee7b7; }
 .btn-sm { padding: 6px 11px; font-size: 12px; border-radius: 8px; }
 .btn-outline {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 6px 11px;
-  font-size: 13px;
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  padding: 6px 11px; font-size: 13px;
 }
 .mobile-only { display: block; }
 .desktop-only { display: none; }
 .meeting-card {
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 10px;
+  background: #0f172a; border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; margin-bottom: 10px;
 }
-.meeting-card.highlight {
-  border-color: var(--primary);
-  background: #1e3a5f;
-}
-.mc-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 10px;
-  gap: 8px;
-}
-.mc-id {
-  font-weight: 700;
-  font-size: 15px;
-  color: #93c5fd;
-  word-break: break-all;
-}
-.mc-bots {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--warning);
-}
-.mc-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.mc-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--muted);
-}
+.meeting-card.highlight { border-color: var(--primary); background: #1e3a5f; }
+.mc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 8px; }
+.mc-id { font-weight: 700; font-size: 15px; color: #93c5fd; word-break: break-all; }
+.mc-bots { font-size: 18px; font-weight: 700; color: var(--warning); }
+.mc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.mc-bottom { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
 .table-wrap { overflow-x: auto; }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
-  text-align: left;
-  padding: 11px 9px;
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  border-bottom: 1px solid var(--border);
+  text-align: left; padding: 11px 9px; color: var(--muted); font-weight: 500;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border);
 }
-td {
-  padding: 11px 9px;
-  border-bottom: 1px solid #1e293b;
-  vertical-align: middle;
-}
+td { padding: 11px 9px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
 tr:hover td { background: #1e293b; }
-tr.highlight td {
-  background: #1e3a5f !important;
-  border-left: 3px solid var(--primary);
-}
+tr.highlight td { background: #1e3a5f !important; border-left: 3px solid var(--primary); }
 .badge {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap;
 }
 .badge-slow { background: #422006; color: #fbbf24; }
 .badge-together { background: #064e3b; color: #34d399; }
 .badge-indian { background: #1e3a5f; color: #93c5fd; }
 .badge-english { background: #064e3b; color: #6ee7b7; }
 .badge-custom { background: #4c1d95; color: #c4b5fd; }
-.countdown {
-  font-family: ui-monospace, monospace;
-  color: var(--warning);
-  font-weight: 600;
-  font-size: 12px;
-}
-.search-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
+.countdown { font-family: ui-monospace, monospace; color: var(--warning); font-weight: 600; font-size: 12px; }
+.search-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .search-row input {
-  flex: 1;
-  padding: 10px 13px;
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  font-size: 14px;
-  min-width: 0;
+  flex: 1; padding: 10px 13px; background: #0f172a; border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px; min-width: 0;
 }
 .log {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  font-family: ui-monospace, monospace;
-  word-break: break-word;
+  margin-top: 12px; padding: 10px 12px; background: #0f172a; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; word-break: break-word;
 }
 .log .ok { color: var(--success); }
 .log .err { color: var(--danger); }
 .log .info { color: var(--primary); }
 #customBox {
-  display: none;
-  margin-top: 10px;
-  padding: 12px;
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  display: none; margin-top: 10px; padding: 12px; background: #0f172a;
+  border: 1px solid var(--border); border-radius: 10px;
 }
-.empty {
-  text-align: center;
-  color: var(--muted);
-  padding: 22px 10px;
-  font-size: 14px;
-}
+.empty { text-align: center; color: var(--muted); padding: 22px 10px; font-size: 14px; }
 @media (min-width: 768px) {
   .mobile-only { display: none; }
   .desktop-only { display: block; }
@@ -719,30 +540,35 @@ tr.highlight td {
     </div>
   </div>
 
-  <!-- SESSION JSON UPLOAD -->
+  <!-- SESSION BOX (Collapsible) -->
   <div class="card" style="margin-bottom:16px;">
-    <div class="section-title">🔑 Update Zoom Session JSON</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
-      Locally login karke <b>zoom_session.json</b> ka poora content yahan paste karo → Save dabao
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
+      <button class="btn btn-outline btn-sm" id="toggleSessionBtn" onclick="toggleSessionBox()">✏️ Update Session</button>
     </div>
-    <textarea id="sessionJson" rows="7" placeholder='{"cookies":[...],"origins":[...]}'
-      style="width:100%;padding:12px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
-    <div style="display:flex;gap:10px;margin-top:10px;">
-      <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
-      <button class="btn btn-outline" onclick="document.getElementById('sessionJson').value=''">Clear</button>
+    <div id="sessionStatusLine" style="font-size:13px;color:var(--muted);">
+      Status: <span id="sessionStatusText">Checking...</span>
+    </div>
+    <div id="sessionEditBox" style="display:none;margin-top:12px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+        Locally login karke <b>zoom_session.json</b> ka poora content yahan paste karo
+      </div>
+      <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}'
+        style="width:100%;padding:12px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
+        <button class="btn btn-outline" onclick="cancelSessionEdit()">Cancel</button>
+      </div>
     </div>
   </div>
 
   <div class="grid">
-    <!-- LEFT -->
     <div class="card">
       <div class="section-title">🚀 Launch / Schedule</div>
-
       <div class="mode-toggle">
         <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
         <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
       </div>
-
       <div class="form-group">
         <label>Meeting ID</label>
         <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
@@ -751,7 +577,6 @@ tr.highlight td {
         <label>Passcode (optional)</label>
         <input id="passcode" placeholder="Leave blank if none" />
       </div>
-
       <div class="form-row">
         <div class="form-group">
           <label>Bots</label>
@@ -766,7 +591,6 @@ tr.highlight td {
           </select>
         </div>
       </div>
-
       <div id="customBox">
         <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
         <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
@@ -775,12 +599,10 @@ tr.highlight td {
           <span id="nameStatus"></span>
         </div>
       </div>
-
       <div class="form-group">
         <label>Duration (minutes)</label>
         <input type="number" id="duration" value="120" min="1" />
       </div>
-
       <div class="schedule-box">
         <label class="schedule-check">
           <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
@@ -797,16 +619,13 @@ tr.highlight td {
           </div>
         </div>
       </div>
-
       <div class="btn-row">
         <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
         <button class="btn btn-danger" onclick="killAll()">Kill All</button>
       </div>
-
       <div id="msg" class="log">Ready • IST</div>
     </div>
 
-    <!-- RIGHT -->
     <div style="display:flex;flex-direction:column;gap:16px;">
       <div class="card">
         <div class="section-title">🟢 Active Meetings</div>
@@ -817,31 +636,18 @@ tr.highlight td {
         <div id="activeListMobile" class="mobile-only"><div class="empty">No active meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="tbodyActive">
-              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>
-            </tbody>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th></tr></thead>
+            <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr></tbody>
           </table>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">📅 Scheduled Meetings</div>
         <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="tbodySchedule">
-              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>
-            </tbody>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th></tr></thead>
+            <tbody id="tbodySchedule"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -906,15 +712,41 @@ function formatCountdown(iso) {
   } catch { return '-'; }
 }
 
+function toggleSessionBox() {
+  const box = $('sessionEditBox');
+  const btn = $('toggleSessionBtn');
+  if (box.style.display === 'none') {
+    box.style.display = 'block';
+    btn.textContent = '✕ Close';
+  } else {
+    box.style.display = 'none';
+    btn.textContent = '✏️ Update Session';
+  }
+}
+function cancelSessionEdit() {
+  $('sessionEditBox').style.display = 'none';
+  $('toggleSessionBtn').textContent = '✏️ Update Session';
+  $('sessionJson').value = '';
+}
+
 function updateSessionUI(session) {
   const badge = $('sessionBadge');
+  const statusText = $('sessionStatusText');
   isLoggedIn = !!session.logged_in;
   if (isLoggedIn) {
     badge.className = 'session-badge logged-in';
     badge.textContent = '🟢 Logged In';
+    if (statusText) {
+      statusText.textContent = session.message || 'Session active';
+      statusText.style.color = '#34d399';
+    }
   } else {
     badge.className = 'session-badge logged-out';
     badge.textContent = '🔴 No Session';
+    if (statusText) {
+      statusText.textContent = session.message || 'No session file';
+      statusText.style.color = '#fca5a5';
+    }
   }
 }
 
@@ -934,8 +766,14 @@ async function saveSession() {
     });
     const d = await r.json();
     if (r.ok) {
-      show(d.message || 'Session saved!', 'ok');
+      show('✅ Session saved successfully!', 'ok');
+      $('sessionEditBox').style.display = 'none';
+      $('toggleSessionBtn').textContent = '✏️ Update Session';
       $('sessionJson').value = '';
+      if ($('sessionStatusText')) {
+        $('sessionStatusText').textContent = 'Session updated just now ✓';
+        $('sessionStatusText').style.color = '#34d399';
+      }
       setTimeout(refresh, 600);
     } else {
       show(d.detail || 'Save failed', 'err');
