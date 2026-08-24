@@ -552,3 +552,937 @@ async def startup_event():
 
 # ========== DASHBOARD HTML ==========
 # (HTML next message mein dunga kyunki bohot lamba hai)
+
+DASHBOARD_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Zoom Command Center</title>
+<style>
+:root {
+  --bg: #0b0e13;
+  --card: #141a22;
+  --border: #243044;
+  --primary: #3b82f6;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  padding: 12px;
+  padding-bottom: 40px;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #111827;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #93c5fd;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.usage {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 20px;
+  color: var(--muted);
+}
+.usage strong { color: var(--warning); }
+
+.session-badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.session-badge.logged-in {
+  background: #064e3b;
+  color: #34d399;
+}
+.session-badge.logged-out {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+.session-badge.checking {
+  background: #422006;
+  color: #fbbf24;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 1000px) {
+  .grid { grid-template-columns: 380px 1fr; }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 14px;
+}
+
+.form-group { margin-bottom: 12px; }
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 11px 13px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mode-toggle {
+  display: flex;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.mode-btn {
+  flex: 1;
+  padding: 11px 0;
+  text-align: center;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.mode-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.schedule-box {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.schedule-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.schedule-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.schedule-fields {
+  display: none;
+  margin-top: 12px;
+  gap: 10px;
+}
+.schedule-fields.show {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.btn {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  flex: 1;
+}
+.btn-danger {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+.btn-success {
+  background: #065f46;
+  color: #6ee7b7;
+}
+.btn-sm {
+  padding: 6px 11px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 11px;
+  font-size: 13px;
+}
+
+.mobile-only { display: block; }
+.desktop-only { display: none; }
+
+.meeting-card {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.meeting-card.highlight {
+  border-color: var(--primary);
+  background: #1e3a5f;
+}
+.mc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.mc-id {
+  font-weight: 700;
+  font-size: 15px;
+  color: #93c5fd;
+  word-break: break-all;
+}
+.mc-bots {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--warning);
+}
+.mc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.mc-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 11px 9px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 11px 9px;
+  border-bottom: 1px solid #1e293b;
+  vertical-align: middle;
+}
+tr:hover td { background: #1e293b; }
+tr.highlight td {
+  background: #1e3a5f !important;
+  border-left: 3px solid var(--primary);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-slow { background: #422006; color: #fbbf24; }
+.badge-together { background: #064e3b; color: #34d399; }
+.badge-indian { background: #1e3a5f; color: #93c5fd; }
+.badge-english { background: #064e3b; color: #6ee7b7; }
+.badge-custom { background: #4c1d95; color: #c4b5fd; }
+
+.countdown {
+  font-family: ui-monospace, monospace;
+  color: var(--warning);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.search-row input {
+  flex: 1;
+  padding: 10px 13px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.log {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  word-break: break-word;
+}
+.log .ok { color: var(--success); }
+.log .err { color: var(--danger); }
+.log .info { color: var(--primary); }
+
+#customBox {
+  display: none;
+  margin-top: 10px;
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 22px 10px;
+  font-size: 14px;
+}
+
+.login-box {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.login-status-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (min-width: 768px) {
+  .mobile-only { display: none; }
+  .desktop-only { display: block; }
+  .header h1 { font-size: 20px; }
+}
+@media (max-width: 767px) {
+  .form-row { grid-template-columns: 1fr; }
+  .schedule-fields.show { grid-template-columns: 1fr; }
+  .btn { padding: 13px 14px; font-size: 15px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>⚡ Zoom Command Center</h1>
+    <div class="header-right">
+      <div id="sessionBadge" class="session-badge checking">Checking...</div>
+      <div class="usage"><strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
+      <span id="liveTime" style="color:var(--muted)"></span>
+      <button class="btn btn-outline" onclick="refresh()">↻</button>
+    </div>
+  </div>
+
+  <!-- LOGIN STATUS BOX -->
+  <div class="login-box">
+    <div>
+      <div style="font-weight:600;margin-bottom:4px">Zoom Session</div>
+      <div class="login-status-text" id="sessionMsg">Checking status...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-success btn-sm" id="loginBtn" onclick="doLogin()">🔐 Login Now</button>
+      <button class="btn btn-outline btn-sm" onclick="checkSession()">Refresh Status</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="section-title">🚀 Launch / Schedule</div>
+
+      <div class="mode-toggle">
+        <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
+        <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
+      </div>
+
+      <div class="form-group">
+        <label>Meeting ID</label>
+        <input id="meetingId" placeholder="98695209590" inputmode="numeric" />
+      </div>
+      <div class="form-group">
+        <label>Passcode (optional)</label>
+        <input id="passcode" placeholder="Leave blank if none" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Bots</label>
+          <input type="number" id="botCount" value="20" min="1" max="200" oninput="updCount()" />
+        </div>
+        <div class="form-group">
+          <label>Name Type</label>
+          <select id="nameType" onchange="toggleCustom()">
+            <option value="indian">🇮🇳 Indian</option>
+            <option value="english">🇺🇸 English</option>
+            <option value="custom">✏️ Custom</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="customBox">
+        <label style="font-size:12px;color:var(--muted)">Custom names (one per line)</label>
+        <textarea id="customNames" rows="3" placeholder="Rahul Sharma&#10;Arjun Singh"></textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">
+          Names: <strong id="nameCount">0</strong> | Need: <strong id="needCount">20</strong>
+          <span id="nameStatus"></span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" id="duration" value="120" min="1" />
+      </div>
+
+      <div class="schedule-box">
+        <label class="schedule-check">
+          <input type="checkbox" id="enableSchedule" onchange="toggleSchedule()" />
+          Enable Scheduling
+        </label>
+        <div class="schedule-fields" id="scheduleFields">
+          <div class="form-group" style="margin:0">
+            <label>Date</label>
+            <input type="date" id="scheduleDate" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Time (IST)</label>
+            <input type="time" id="scheduleTime" />
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="startBtn" onclick="handleStart()">▶ Start Now</button>
+        <button class="btn btn-danger" onclick="killAll()">Kill All</button>
+      </div>
+
+      <div id="msg" class="log">Ready • IST</div>
+    </div>
+
+    <!-- RIGHT -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- ACTIVE -->
+      <div class="card">
+        <div class="section-title">🟢 Active Meetings</div>
+        <div class="search-row">
+          <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
+          <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
+        </div>
+
+        <div id="activeListMobile" class="mobile-only">
+          <div class="empty">No active meetings</div>
+        </div>
+
+        <div class="desktop-only table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Meeting</th>
+                <th>Bots</th>
+                <th>Started</th>
+                <th>Mode</th>
+                <th>Names</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbodyActive">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SCHEDULED -->
+      <div class="card">
+        <div class="section-title">📅 Scheduled Meetings</div>
+
+        <div id="scheduleListMobile" class="mobile-only">
+          <div class="empty">No scheduled meetings</div>
+        </div>
+
+        <div class="desktop-only table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Meeting</th>
+                <th>Bots</th>
+                <th>When</th>
+                <th>Countdown</th>
+                <th>Mode</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbodySchedule">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.origin;
+const $ = id => document.getElementById(id);
+let currentMode = 'individual';
+let allMeetings = {};
+let allSchedules = {};
+let isLoggedIn = false;
+
+function setMode(mode) {
+  currentMode = mode;
+  $('modeSlow').classList.toggle('active', mode === 'individual');
+  $('modeTogether').classList.toggle('active', mode === 'together');
+}
+
+function toggleSchedule() {
+  const enabled = $('enableSchedule').checked;
+  $('scheduleFields').classList.toggle('show', enabled);
+  $('startBtn').textContent = enabled ? '📅 Schedule' : '▶ Start Now';
+}
+
+function show(m, type='info') {
+  const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info';
+  msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`;
+}
+
+function toggleCustom() {
+  customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
+  updCount();
+}
+
+function updCount() {
+  const bots = parseInt(botCount.value) || 0;
+  const names = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  $('nameCount').textContent = names.length;
+  $('needCount').textContent = bots;
+  const st = $('nameStatus');
+  if (nameType.value !== 'custom') { st.innerHTML = ''; return; }
+  st.innerHTML = names.length >= bots ? ' <span style="color:#10b981">✅</span>' : ` <span style="color:#ef4444">❌ ${bots-names.length} more</span>`;
+}
+customNames.addEventListener('input', updCount);
+
+function updateClock() {
+  liveTime.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'}) + ' IST';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+function formatCountdown(iso) {
+  try {
+    const target = new Date(iso);
+    const now = new Date();
+    let diff = Math.floor((target - now) / 1000);
+    if (diff <= 0) return 'Triggering...';
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  } catch { return '-'; }
+}
+
+function updateSessionUI(session) {
+  const badge = $('sessionBadge');
+  const msg = $('sessionMsg');
+  const loginBtn = $('loginBtn');
+
+  if (session.login_in_progress) {
+    badge.className = 'session-badge checking';
+    badge.textContent = 'Logging in...';
+    msg.textContent = 'Login in progress...';
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Please wait...';
+    return;
+  }
+
+  isLoggedIn = !!session.logged_in;
+
+  if (isLoggedIn) {
+    badge.className = 'session-badge logged-in';
+    badge.textContent = '🟢 Logged In';
+    msg.textContent = session.message || 'Session active';
+    loginBtn.textContent = '🔄 Re-Login';
+  } else {
+    badge.className = 'session-badge logged-out';
+    badge.textContent = '🔴 Logged Out';
+    msg.textContent = session.message || 'Not logged in';
+    loginBtn.textContent = '🔐 Login Now';
+  }
+  loginBtn.disabled = false;
+}
+
+async function checkSession() {
+  try {
+    const r = await fetch(API + '/api/session-status');
+    const d = await r.json();
+    updateSessionUI(d);
+  } catch (e) {
+    $('sessionBadge').className = 'session-badge logged-out';
+    $('sessionBadge').textContent = 'Error';
+    $('sessionMsg').textContent = 'Could not check status';
+  }
+}
+
+async function doLogin() {
+  if (!confirm('Start Zoom login? Old session will be deleted.')) return;
+  $('loginBtn').disabled = true;
+  $('loginBtn').textContent = 'Logging in...';
+  $('sessionBadge').className = 'session-badge checking';
+  $('sessionBadge').textContent = 'Logging in...';
+  show('Login started...', 'info');
+
+  try {
+    const r = await fetch(API + '/api/login', { method: 'POST' });
+    const d = await r.json();
+    updateSessionUI({
+      logged_in: d.logged_in,
+      message: d.message,
+      login_in_progress: false
+    });
+    if (d.success) {
+      show('Login successful!', 'ok');
+    } else {
+      show(d.message || 'Login failed', 'err');
+    }
+  } catch (e) {
+    show(e.message, 'err');
+    $('loginBtn').disabled = false;
+    $('loginBtn').textContent = '🔐 Login Now';
+  }
+}
+
+function renderActive(meetings) {
+  allMeetings = meetings;
+  const search = ($('searchMeeting').value || '').trim().toLowerCase();
+  let filtered = Object.entries(meetings);
+  if (search) filtered = filtered.filter(([m]) => m.toLowerCase().includes(search));
+
+  if (!filtered.length) {
+    activeListMobile.innerHTML = '<div class="empty">No active meetings</div>';
+    tbodyActive.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>';
+    return;
+  }
+
+  activeListMobile.innerHTML = filtered.map(([meeting, m]) => {
+    const bots = m.total_bots || 0;
+    const type = m.name_type || 'indian';
+    const mode = m.join_mode || 'individual';
+    const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+    const isHighlight = search && meeting.toLowerCase().includes(search);
+    return `
+      <div class="meeting-card ${isHighlight ? 'highlight' : ''}">
+        <div class="mc-top">
+          <div class="mc-id">${meeting}</div>
+          <div class="mc-bots">${bots}</div>
+        </div>
+        <div class="mc-meta">
+          <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
+          <span class="badge badge-${type}">${type}</span>
+        </div>
+        <div class="mc-bottom">
+          <span>Started: ${startTime}</span>
+          <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  let idx = 0;
+  tbodyActive.innerHTML = filtered.map(([meeting, m]) => {
+    idx++;
+    const bots = m.total_bots || 0;
+    const type = m.name_type || 'indian';
+    const mode = m.join_mode || 'individual';
+    const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
+    const isHighlight = search && meeting.toLowerCase().includes(search);
+    return `<tr class="${isHighlight ? 'highlight' : ''}">
+      <td>${idx}</td>
+      <td style="font-weight:600;color:#93c5fd">${meeting}</td>
+      <td><strong style="color:#fbbf24">${bots}</strong></td>
+      <td>${startTime}</td>
+      <td><span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span></td>
+      <td><span class="badge badge-${type}">${type}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSchedules(schedules) {
+  allSchedules = schedules;
+  const entries = Object.entries(schedules);
+
+  if (!entries.length) {
+    scheduleListMobile.innerHTML = '<div class="empty">No scheduled meetings</div>';
+    tbodySchedule.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';
+    return;
+  }
+
+  scheduleListMobile.innerHTML = entries.map(([sid, s]) => {
+    const when = new Date(s.schedule_at).toLocaleString('en-IN', {
+      timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+    });
+    return `
+      <div class="meeting-card">
+        <div class="mc-top">
+          <div class="mc-id">${s.meeting_code}</div>
+          <div class="mc-bots">${s.bot_count}</div>
+        </div>
+        <div class="mc-meta">
+          <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
+          <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
+        </div>
+        <div class="mc-bottom">
+          <div>
+            <div>${when}</div>
+            <div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  let idx = 0;
+  tbodySchedule.innerHTML = entries.map(([sid, s]) => {
+    idx++;
+    const when = new Date(s.schedule_at).toLocaleString('en-IN', {timeZone:'Asia/Kolkata'});
+    return `<tr>
+      <td>${idx}</td>
+      <td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
+      <td><strong style="color:#fbbf24">${s.bot_count}</strong></td>
+      <td>${when}</td>
+      <td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td>
+      <td><span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterMeetings() { renderActive(allMeetings); }
+
+async function refresh() {
+  try {
+    const r = await fetch(API + '/status');
+    const d = await r.json();
+
+    if (d.session) updateSessionUI(d.session);
+
+    const workers = d.workers || {};
+    let total = d.total_capacity || 0;
+    let free = d.total_free_capacity || 0;
+    totalCap.textContent = total - free;
+    totalCapMax.textContent = total;
+
+    renderActive(d.meetings || {});
+    renderSchedules(d.schedules || {});
+    show('Refreshed', 'ok');
+  } catch (e) {
+    show(e.message || 'Failed', 'err');
+  }
+}
+
+setInterval(() => {
+  Object.keys(allSchedules).forEach(sid => {
+    const el1 = document.getElementById('cd-m-' + sid);
+    const el2 = document.getElementById('cd-d-' + sid);
+    const txt = formatCountdown(allSchedules[sid].schedule_at);
+    if (el1) el1.textContent = txt;
+    if (el2) el2.textContent = txt;
+  });
+}, 1000);
+
+async function handleStart() {
+  if (!isLoggedIn) {
+    return show('Please login first', 'err');
+  }
+
+  const meeting = meetingId.value.trim().replace(/\s/g, '');
+  const pass = passcode.value.trim();
+  const bots = parseInt(botCount.value) || 10;
+  const dur = parseInt(duration.value) || 120;
+  const type = nameType.value;
+  let custom = null;
+  if (type === 'custom') {
+    custom = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+    if (custom.length < bots) return show('Need more custom names', 'err');
+  }
+  if (!meeting) return show('Meeting ID required', 'err');
+
+  const isSchedule = $('enableSchedule').checked;
+
+  if (isSchedule) {
+    const date = $('scheduleDate').value;
+    const time = $('scheduleTime').value;
+    if (!date || !time) return show('Select date & time', 'err');
+    const scheduleAt = `${date}T${time}:00`;
+    try {
+      show('Scheduling...', 'info');
+      const r = await fetch(API + '/api/schedule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          meeting_code: meeting, passcode: pass, bot_count: bots,
+          duration_minutes: dur, name_type: type, custom_names: custom,
+          join_mode: currentMode, schedule_at: scheduleAt
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        show(d.message || 'Scheduled!', 'ok');
+        $('enableSchedule').checked = false;
+        toggleSchedule();
+        setTimeout(refresh, 500);
+      } else show(d.detail || 'Failed', 'err');
+    } catch (e) { show(e.message, 'err'); }
+  } else {
+    try {
+      show(`Starting ${bots} bots...`, 'info');
+      const r = await fetch(API + '/api/start-bots', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          meeting_code: meeting, passcode: pass, bot_count: bots,
+          duration_minutes: dur, name_type: type, custom_names: custom,
+          join_mode: currentMode
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        show(d.message || 'Started!', 'ok');
+        setTimeout(refresh, 500);
+      } else show(d.detail || 'Failed', 'err');
+    } catch (e) { show(e.message, 'err'); }
+  }
+}
+
+async function killMeeting(meeting) {
+  if (!confirm(`Kill all bots for ${meeting}?`)) return;
+  try {
+    const r = await fetch(API + '/api/terminate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({meeting_code: meeting})
+    });
+    const d = await r.json();
+    if (r.ok) { show(d.message || 'Killed', 'ok'); setTimeout(refresh, 500); }
+    else show(d.detail || 'Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
+}
+
+async function killBySearch() {
+  const meeting = $('searchMeeting').value.trim().replace(/\s/g, '');
+  if (!meeting) return show('Enter Meeting ID', 'err');
+  await killMeeting(meeting);
+}
+
+async function killAll() {
+  if (!confirm('Kill ALL active meetings?')) return;
+  try {
+    const r = await fetch(API + '/api/terminate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (r.ok) { show('All killed', 'ok'); setTimeout(refresh, 500); }
+    else show(d.detail || 'Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
+}
+
+async function deleteSchedule(sid) {
+  if (!confirm('Cancel this schedule?')) return;
+  try {
+    const r = await fetch(API + '/api/schedule/' + sid, {method: 'DELETE'});
+    if (r.ok) { show('Cancelled', 'ok'); setTimeout(refresh, 400); }
+    else show('Failed', 'err');
+  } catch (e) { show(e.message, 'err'); }
+}
+
+setInterval(refresh, 5000);
+setInterval(checkSession, 15000);
+refresh();
+checkSession();
+</script>
+</body>
+</html>
