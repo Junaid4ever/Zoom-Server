@@ -1486,3 +1486,13 @@ checkSession();
 </script>
 </body>
 </html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard():
+    return HTMLResponse(DASHBOARD_HTML)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(asgi_app, host="0.0.0.0", port=port)
