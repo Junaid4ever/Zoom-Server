@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – FULL + AUTO LOGIN + SESSION STATUS
+# ZOOM BOT CENTRAL – FULL FINAL (Session JSON Upload)
 # ============================================
 import os
 import uuid
@@ -7,12 +7,11 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import socketio
-from playwright.async_api import async_playwright
 
 # ========== IST ==========
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -43,17 +42,12 @@ running_tasks = {}
 meeting_groups = {}
 scheduled_tasks = {}
 
-# Session status
 session_status = {
     "logged_in": False,
     "last_checked": None,
-    "message": "Not checked yet",
+    "message": "No session file",
     "login_in_progress": False
 }
-
-# Zoom credentials (Railway env se bhi le sakte ho)
-ZOOM_EMAIL = os.environ.get("ZOOM_EMAIL", "mohdjunaidq@clickorbit.in")
-ZOOM_PASSWORD = os.environ.get("ZOOM_PASSWORD", "Zoom@126")
 
 # ========== MODELS ==========
 class StartBotRequest(BaseModel):
@@ -78,169 +72,6 @@ class ScheduleRequest(BaseModel):
 class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
-
-# ========== LOGIN FUNCTION ==========
-async def perform_zoom_login():
-    global session_status
-    session_status["login_in_progress"] = True
-    session_status["message"] = "Login in progress..."
-
-    try:
-        if os.path.exists("zoom_session.json"):
-            os.remove("zoom_session.json")
-            print("🗑️ Old session deleted")
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-blink-features=AutomationControlled'
-                ]
-            )
-            context = await browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-
-            max_attempts = 3
-            for attempt in range(1, max_attempts + 1):
-                print(f"Login attempt {attempt}/{max_attempts}")
-                page = await context.new_page()
-                try:
-                    await page.goto("https://zoom.us/signin#/login", timeout=30000)
-                    await page.wait_for_load_state("networkidle")
-                    await asyncio.sleep(1)
-
-                    if "signin" not in page.url:
-                        storage = await context.storage_state()
-                        with open("zoom_session.json", "w") as f:
-                            json.dump(storage, f, indent=2)
-                        await page.close()
-                        await browser.close()
-                        session_status.update({
-                            "logged_in": True,
-                            "last_checked": now_ist().isoformat(),
-                            "message": "Logged in successfully",
-                            "login_in_progress": False
-                        })
-                        print("✅ Login successful")
-                        return True
-
-                    email_field = await page.wait_for_selector('//*[@id="email"]', state="attached", timeout=10000)
-                    await email_field.fill(ZOOM_EMAIL)
-                    await page.click('//*[@id="signin_btn_next"]')
-                    await page.wait_for_load_state("networkidle")
-                    await page.wait_for_selector('//*[@id="password"]', state="attached", timeout=15000)
-                    await asyncio.sleep(0.5)
-
-                    password_field = page.locator('//*[@id="password"]')
-                    await password_field.fill(ZOOM_PASSWORD)
-
-                    try:
-                        await page.click('//*[@id="js_btn_login"]/span', force=True)
-                    except:
-                        pass
-                    await page.keyboard.press('Enter')
-                    await page.evaluate("document.getElementById('js_btn_login')?.click()")
-                    await asyncio.sleep(4)
-
-                    if "signin" not in page.url:
-                        storage = await context.storage_state()
-                        with open("zoom_session.json", "w") as f:
-                            json.dump(storage, f, indent=2)
-                        await page.close()
-                        await browser.close()
-                        session_status.update({
-                            "logged_in": True,
-                            "last_checked": now_ist().isoformat(),
-                            "message": "Logged in successfully",
-                            "login_in_progress": False
-                        })
-                        print("✅ Login successful")
-                        return True
-                    else:
-                        if await page.locator("text=An error with reCAPTCHA occurred").count() > 0:
-                            print("⚠️ reCAPTCHA detected")
-                        print(f"Attempt {attempt} failed")
-                except Exception as e:
-                    print(f"Login error: {e}")
-                finally:
-                    await page.close()
-
-                if attempt < max_attempts:
-                    await context.close()
-                    context = await browser.new_context(
-                        viewport={"width": 1280, "height": 800},
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                    await asyncio.sleep(2)
-
-            await browser.close()
-            session_status.update({
-                "logged_in": False,
-                "last_checked": now_ist().isoformat(),
-                "message": "Login failed (reCAPTCHA or wrong credentials)",
-                "login_in_progress": False
-            })
-            return False
-
-    except Exception as e:
-        session_status.update({
-            "logged_in": False,
-            "last_checked": now_ist().isoformat(),
-            "message": f"Login error: {str(e)[:80]}",
-            "login_in_progress": False
-        })
-        return False
-
-# ========== SESSION CHECK ==========
-async def check_session_status():
-    global session_status
-    if session_status.get("login_in_progress"):
-        return
-
-    if not os.path.exists("zoom_session.json"):
-        session_status.update({
-            "logged_in": False,
-            "last_checked": now_ist().isoformat(),
-            "message": "No session file found"
-        })
-        return
-
-    try:
-        with open("zoom_session.json", "r") as f:
-            storage = json.load(f)
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
-            context = await browser.new_context(storage_state=storage)
-            page = await context.new_page()
-            await page.goto("https://zoom.us/profile", timeout=20000)
-            await asyncio.sleep(2)
-            url = page.url
-            await browser.close()
-
-            if "signin" in url or "login" in url:
-                session_status.update({
-                    "logged_in": False,
-                    "last_checked": now_ist().isoformat(),
-                    "message": "Session expired – Logged Out"
-                })
-            else:
-                session_status.update({
-                    "logged_in": True,
-                    "last_checked": now_ist().isoformat(),
-                    "message": "Logged In"
-                })
-    except Exception as e:
-        session_status.update({
-            "logged_in": False,
-            "last_checked": now_ist().isoformat(),
-            "message": f"Check failed: {str(e)[:60]}"
-        })
 
 # ========== SOCKET EVENTS ==========
 @sio.event
@@ -270,7 +101,6 @@ async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
     now = now_ist().isoformat()
-
     if wid in workers:
         workers[wid]["sid"] = sid
         workers[wid]["max_capacity"] = max_cap
@@ -316,27 +146,39 @@ async def get_session():
 
 @app.get("/api/session-status")
 async def api_session_status():
+    if os.path.exists("zoom_session.json"):
+        session_status["logged_in"] = True
+        if "updated" not in (session_status.get("message") or "").lower():
+            session_status["message"] = "Session file present"
+    else:
+        session_status["logged_in"] = False
+        session_status["message"] = "No session file found"
+    session_status["last_checked"] = now_ist().isoformat()
     return session_status
 
-@app.post("/api/login")
-async def api_login():
-    if session_status.get("login_in_progress"):
-        return {"success": False, "message": "Login already in progress"}
-    success = await perform_zoom_login()
-    return {
-        "success": success,
-        "message": session_status["message"],
-        "logged_in": session_status["logged_in"]
-    }
+@app.post("/api/update-session")
+async def update_session(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict) or "cookies" not in data:
+            raise HTTPException(400, "Invalid session JSON. Must contain 'cookies'")
+        with open("zoom_session.json", "w") as f:
+            json.dump(data, f, indent=2)
+        session_status.update({
+            "logged_in": True,
+            "last_checked": now_ist().isoformat(),
+            "message": "Session updated manually ✓",
+            "login_in_progress": False
+        })
+        print("✅ Session JSON updated successfully")
+        return {"success": True, "message": "Session saved successfully"}
+    except Exception as e:
+        raise HTTPException(400, f"Failed to save session: {str(e)}")
 
 @app.get("/status")
 @app.get("/api/status")
 async def status():
-    # Only connected workers
-    connected_workers = {
-        wid: info for wid, info in workers.items()
-        if info.get("sid") is not None
-    }
+    connected_workers = {wid: info for wid, info in workers.items() if info.get("sid") is not None}
     total_free = sum(w.get("free_capacity", 0) for w in connected_workers.values())
     total_capacity = sum(w.get("max_capacity", 0) for w in connected_workers.values())
 
@@ -368,8 +210,8 @@ async def status():
 
 @app.post("/api/start-bots")
 async def start_bots(req: StartBotRequest):
-    if not session_status.get("logged_in"):
-        raise HTTPException(400, "Zoom session not logged in. Please login first.")
+    if not os.path.exists("zoom_session.json"):
+        raise HTTPException(400, "No session file. Please upload zoom_session.json first.")
 
     if req.bot_count < 1:
         raise HTTPException(400, "bot_count must be >= 1")
@@ -381,7 +223,6 @@ async def start_bots(req: StartBotRequest):
     remaining = req.bot_count
     assigned = []
     connected = {wid: info for wid, info in workers.items() if info.get("sid")}
-
     sorted_workers = sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True)
 
     for wid, info in sorted_workers:
@@ -506,12 +347,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         meeting_groups.clear()
         return {"success": True, "message": "All tasks terminated"}
 
-# ========== BACKGROUND TASKS ==========
-async def session_checker():
-    while True:
-        await check_session_status()
-        await asyncio.sleep(30)   # har 30 second mein check
-
+# ========== BACKGROUND ==========
 async def schedule_checker():
     while True:
         await asyncio.sleep(4)
@@ -544,15 +380,16 @@ async def schedule_checker():
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(session_checker())
     asyncio.create_task(schedule_checker())
-    # Initial check
-    asyncio.create_task(check_session_status())
-    print("✅ Background tasks started")
+    if os.path.exists("zoom_session.json"):
+        session_status.update({
+            "logged_in": True,
+            "message": "Session file present",
+            "last_checked": now_ist().isoformat()
+        })
+    print("✅ Server started")
 
 # ========== DASHBOARD HTML ==========
-# (HTML next message mein dunga kyunki bohot lamba hai)
-
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -581,7 +418,6 @@ body {
   padding-bottom: 40px;
 }
 .container { max-width: 1400px; margin: 0 auto; }
-
 .header {
   display: flex;
   justify-content: space-between;
@@ -594,18 +430,8 @@ body {
   gap: 10px;
   flex-wrap: wrap;
 }
-.header h1 {
-  font-size: 18px;
-  font-weight: 700;
-  color: #93c5fd;
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  flex-wrap: wrap;
-}
+.header h1 { font-size: 18px; font-weight: 700; color: #93c5fd; }
+.header-right { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 .usage {
   background: #0f172a;
   border: 1px solid var(--border);
@@ -614,26 +440,14 @@ body {
   color: var(--muted);
 }
 .usage strong { color: var(--warning); }
-
 .session-badge {
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
 }
-.session-badge.logged-in {
-  background: #064e3b;
-  color: #34d399;
-}
-.session-badge.logged-out {
-  background: #7f1d1d;
-  color: #fca5a5;
-}
-.session-badge.checking {
-  background: #422006;
-  color: #fbbf24;
-}
-
+.session-badge.logged-in { background: #064e3b; color: #34d399; }
+.session-badge.logged-out { background: #7f1d1d; color: #fca5a5; }
 .grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -642,7 +456,6 @@ body {
 @media (min-width: 1000px) {
   .grid { grid-template-columns: 380px 1fr; }
 }
-
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -655,7 +468,6 @@ body {
   color: #93c5fd;
   margin-bottom: 14px;
 }
-
 .form-group { margin-bottom: 12px; }
 .form-group label {
   display: block;
@@ -678,7 +490,6 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
-
 .mode-toggle {
   display: flex;
   background: #0f172a;
@@ -697,11 +508,7 @@ body {
   color: var(--muted);
   cursor: pointer;
 }
-.mode-btn.active {
-  background: var(--primary);
-  color: white;
-}
-
+.mode-btn.active { background: var(--primary); color: white; }
 .schedule-box {
   background: #0f172a;
   border: 1px solid var(--border);
@@ -730,7 +537,6 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-
 .btn-row {
   display: flex;
   gap: 10px;
@@ -745,24 +551,10 @@ body {
   font-size: 14px;
   cursor: pointer;
 }
-.btn-primary {
-  background: var(--primary);
-  color: white;
-  flex: 1;
-}
-.btn-danger {
-  background: #7f1d1d;
-  color: #fecaca;
-}
-.btn-success {
-  background: #065f46;
-  color: #6ee7b7;
-}
-.btn-sm {
-  padding: 6px 11px;
-  font-size: 12px;
-  border-radius: 8px;
-}
+.btn-primary { background: var(--primary); color: white; flex: 1; }
+.btn-danger { background: #7f1d1d; color: #fecaca; }
+.btn-success { background: #065f46; color: #6ee7b7; }
+.btn-sm { padding: 6px 11px; font-size: 12px; border-radius: 8px; }
 .btn-outline {
   background: transparent;
   border: 1px solid var(--border);
@@ -770,10 +562,8 @@ body {
   padding: 6px 11px;
   font-size: 13px;
 }
-
 .mobile-only { display: block; }
 .desktop-only { display: none; }
-
 .meeting-card {
   background: #0f172a;
   border: 1px solid var(--border);
@@ -816,7 +606,6 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
-
 .table-wrap { overflow-x: auto; }
 table {
   width: 100%;
@@ -843,7 +632,6 @@ tr.highlight td {
   background: #1e3a5f !important;
   border-left: 3px solid var(--primary);
 }
-
 .badge {
   display: inline-block;
   padding: 3px 9px;
@@ -857,14 +645,12 @@ tr.highlight td {
 .badge-indian { background: #1e3a5f; color: #93c5fd; }
 .badge-english { background: #064e3b; color: #6ee7b7; }
 .badge-custom { background: #4c1d95; color: #c4b5fd; }
-
 .countdown {
   font-family: ui-monospace, monospace;
   color: var(--warning);
   font-weight: 600;
   font-size: 12px;
 }
-
 .search-row {
   display: flex;
   gap: 8px;
@@ -880,7 +666,6 @@ tr.highlight td {
   font-size: 14px;
   min-width: 0;
 }
-
 .log {
   margin-top: 12px;
   padding: 10px 12px;
@@ -895,7 +680,6 @@ tr.highlight td {
 .log .ok { color: var(--success); }
 .log .err { color: var(--danger); }
 .log .info { color: var(--primary); }
-
 #customBox {
   display: none;
   margin-top: 10px;
@@ -910,24 +694,6 @@ tr.highlight td {
   padding: 22px 10px;
   font-size: 14px;
 }
-
-.login-box {
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.login-status-text {
-  font-size: 13px;
-  color: var(--muted);
-}
-
 @media (min-width: 768px) {
   .mobile-only { display: none; }
   .desktop-only { display: block; }
@@ -946,22 +712,24 @@ tr.highlight td {
   <div class="header">
     <h1>⚡ Zoom Command Center</h1>
     <div class="header-right">
-      <div id="sessionBadge" class="session-badge checking">Checking...</div>
+      <div id="sessionBadge" class="session-badge logged-out">Checking...</div>
       <div class="usage"><strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
       <span id="liveTime" style="color:var(--muted)"></span>
       <button class="btn btn-outline" onclick="refresh()">↻</button>
     </div>
   </div>
 
-  <!-- LOGIN STATUS BOX -->
-  <div class="login-box">
-    <div>
-      <div style="font-weight:600;margin-bottom:4px">Zoom Session</div>
-      <div class="login-status-text" id="sessionMsg">Checking status...</div>
+  <!-- SESSION JSON UPLOAD -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-title">🔑 Update Zoom Session JSON</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+      Locally login karke <b>zoom_session.json</b> ka poora content yahan paste karo → Save dabao
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-success btn-sm" id="loginBtn" onclick="doLogin()">🔐 Login Now</button>
-      <button class="btn btn-outline btn-sm" onclick="checkSession()">Refresh Status</button>
+    <textarea id="sessionJson" rows="7" placeholder='{"cookies":[...],"origins":[...]}'
+      style="width:100%;padding:12px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
+      <button class="btn btn-outline" onclick="document.getElementById('sessionJson').value=''">Clear</button>
     </div>
   </div>
 
@@ -1040,30 +808,18 @@ tr.highlight td {
 
     <!-- RIGHT -->
     <div style="display:flex;flex-direction:column;gap:16px;">
-
-      <!-- ACTIVE -->
       <div class="card">
         <div class="section-title">🟢 Active Meetings</div>
         <div class="search-row">
           <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()" />
           <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
         </div>
-
-        <div id="activeListMobile" class="mobile-only">
-          <div class="empty">No active meetings</div>
-        </div>
-
+        <div id="activeListMobile" class="mobile-only"><div class="empty">No active meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Meeting</th>
-                <th>Bots</th>
-                <th>Started</th>
-                <th>Mode</th>
-                <th>Names</th>
-                <th></th>
+                <th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th>
               </tr>
             </thead>
             <tbody id="tbodyActive">
@@ -1073,25 +829,14 @@ tr.highlight td {
         </div>
       </div>
 
-      <!-- SCHEDULED -->
       <div class="card">
         <div class="section-title">📅 Scheduled Meetings</div>
-
-        <div id="scheduleListMobile" class="mobile-only">
-          <div class="empty">No scheduled meetings</div>
-        </div>
-
+        <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Meeting</th>
-                <th>Bots</th>
-                <th>When</th>
-                <th>Countdown</th>
-                <th>Mode</th>
-                <th></th>
+                <th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th>
               </tr>
             </thead>
             <tbody id="tbodySchedule">
@@ -1100,7 +845,6 @@ tr.highlight td {
           </table>
         </div>
       </div>
-
     </div>
   </div>
 </div>
@@ -1118,23 +862,19 @@ function setMode(mode) {
   $('modeSlow').classList.toggle('active', mode === 'individual');
   $('modeTogether').classList.toggle('active', mode === 'together');
 }
-
 function toggleSchedule() {
   const enabled = $('enableSchedule').checked;
   $('scheduleFields').classList.toggle('show', enabled);
   $('startBtn').textContent = enabled ? '📅 Schedule' : '▶ Start Now';
 }
-
 function show(m, type='info') {
   const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info';
   msg.innerHTML = `<span class="${cls}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`;
 }
-
 function toggleCustom() {
   customBox.style.display = nameType.value === 'custom' ? 'block' : 'none';
   updCount();
 }
-
 function updCount() {
   const bots = parseInt(botCount.value) || 0;
   const names = customNames.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
@@ -1168,72 +908,39 @@ function formatCountdown(iso) {
 
 function updateSessionUI(session) {
   const badge = $('sessionBadge');
-  const msg = $('sessionMsg');
-  const loginBtn = $('loginBtn');
-
-  if (session.login_in_progress) {
-    badge.className = 'session-badge checking';
-    badge.textContent = 'Logging in...';
-    msg.textContent = 'Login in progress...';
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Please wait...';
-    return;
-  }
-
   isLoggedIn = !!session.logged_in;
-
   if (isLoggedIn) {
     badge.className = 'session-badge logged-in';
     badge.textContent = '🟢 Logged In';
-    msg.textContent = session.message || 'Session active';
-    loginBtn.textContent = '🔄 Re-Login';
   } else {
     badge.className = 'session-badge logged-out';
-    badge.textContent = '🔴 Logged Out';
-    msg.textContent = session.message || 'Not logged in';
-    loginBtn.textContent = '🔐 Login Now';
-  }
-  loginBtn.disabled = false;
-}
-
-async function checkSession() {
-  try {
-    const r = await fetch(API + '/api/session-status');
-    const d = await r.json();
-    updateSessionUI(d);
-  } catch (e) {
-    $('sessionBadge').className = 'session-badge logged-out';
-    $('sessionBadge').textContent = 'Error';
-    $('sessionMsg').textContent = 'Could not check status';
+    badge.textContent = '🔴 No Session';
   }
 }
 
-async function doLogin() {
-  if (!confirm('Start Zoom login? Old session will be deleted.')) return;
-  $('loginBtn').disabled = true;
-  $('loginBtn').textContent = 'Logging in...';
-  $('sessionBadge').className = 'session-badge checking';
-  $('sessionBadge').textContent = 'Logging in...';
-  show('Login started...', 'info');
+async function saveSession() {
+  const raw = $('sessionJson').value.trim();
+  if (!raw) return show('Please paste session JSON', 'err');
+  let data;
+  try { data = JSON.parse(raw); } catch (e) { return show('Invalid JSON format', 'err'); }
+  if (!data.cookies) return show('JSON must contain "cookies"', 'err');
 
   try {
-    const r = await fetch(API + '/api/login', { method: 'POST' });
-    const d = await r.json();
-    updateSessionUI({
-      logged_in: d.logged_in,
-      message: d.message,
-      login_in_progress: false
+    show('Saving session...', 'info');
+    const r = await fetch(API + '/api/update-session', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
     });
-    if (d.success) {
-      show('Login successful!', 'ok');
+    const d = await r.json();
+    if (r.ok) {
+      show(d.message || 'Session saved!', 'ok');
+      $('sessionJson').value = '';
+      setTimeout(refresh, 600);
     } else {
-      show(d.message || 'Login failed', 'err');
+      show(d.detail || 'Save failed', 'err');
     }
-  } catch (e) {
-    show(e.message, 'err');
-    $('loginBtn').disabled = false;
-    $('loginBtn').textContent = '🔐 Login Now';
-  }
+  } catch (e) { show(e.message, 'err'); }
 }
 
 function renderActive(meetings) {
@@ -1254,21 +961,17 @@ function renderActive(meetings) {
     const mode = m.join_mode || 'individual';
     const startTime = m.started_at ? new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}) : '-';
     const isHighlight = search && meeting.toLowerCase().includes(search);
-    return `
-      <div class="meeting-card ${isHighlight ? 'highlight' : ''}">
-        <div class="mc-top">
-          <div class="mc-id">${meeting}</div>
-          <div class="mc-bots">${bots}</div>
-        </div>
-        <div class="mc-meta">
-          <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
-          <span class="badge badge-${type}">${type}</span>
-        </div>
-        <div class="mc-bottom">
-          <span>Started: ${startTime}</span>
-          <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
-        </div>
-      </div>`;
+    return `<div class="meeting-card ${isHighlight ? 'highlight' : ''}">
+      <div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${bots}</div></div>
+      <div class="mc-meta">
+        <span class="badge ${mode === 'together' ? 'badge-together' : 'badge-slow'}">${mode === 'together' ? 'Together' : 'Slow'}</span>
+        <span class="badge badge-${type}">${type}</span>
+      </div>
+      <div class="mc-bottom">
+        <span>Started: ${startTime}</span>
+        <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+      </div>
+    </div>`;
   }).join('');
 
   let idx = 0;
@@ -1294,7 +997,6 @@ function renderActive(meetings) {
 function renderSchedules(schedules) {
   allSchedules = schedules;
   const entries = Object.entries(schedules);
-
   if (!entries.length) {
     scheduleListMobile.innerHTML = '<div class="empty">No scheduled meetings</div>';
     tbodySchedule.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';
@@ -1302,27 +1004,18 @@ function renderSchedules(schedules) {
   }
 
   scheduleListMobile.innerHTML = entries.map(([sid, s]) => {
-    const when = new Date(s.schedule_at).toLocaleString('en-IN', {
-      timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
-    });
-    return `
-      <div class="meeting-card">
-        <div class="mc-top">
-          <div class="mc-id">${s.meeting_code}</div>
-          <div class="mc-bots">${s.bot_count}</div>
-        </div>
-        <div class="mc-meta">
-          <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
-          <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
-        </div>
-        <div class="mc-bottom">
-          <div>
-            <div>${when}</div>
-            <div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div>
-          </div>
-          <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
-        </div>
-      </div>`;
+    const when = new Date(s.schedule_at).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+    return `<div class="meeting-card">
+      <div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div>
+      <div class="mc-meta">
+        <span class="badge ${s.join_mode === 'together' ? 'badge-together' : 'badge-slow'}">${s.join_mode === 'together' ? 'Together' : 'Slow'}</span>
+        <span class="badge badge-${s.name_type || 'indian'}">${s.name_type || 'indian'}</span>
+      </div>
+      <div class="mc-bottom">
+        <div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div>
+        <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button>
+      </div>
+    </div>`;
   }).join('');
 
   let idx = 0;
@@ -1347,15 +1040,9 @@ async function refresh() {
   try {
     const r = await fetch(API + '/status');
     const d = await r.json();
-
     if (d.session) updateSessionUI(d.session);
-
-    const workers = d.workers || {};
-    let total = d.total_capacity || 0;
-    let free = d.total_free_capacity || 0;
-    totalCap.textContent = total - free;
-    totalCapMax.textContent = total;
-
+    totalCap.textContent = (d.total_capacity || 0) - (d.total_free_capacity || 0);
+    totalCapMax.textContent = d.total_capacity || 0;
     renderActive(d.meetings || {});
     renderSchedules(d.schedules || {});
     show('Refreshed', 'ok');
@@ -1366,19 +1053,16 @@ async function refresh() {
 
 setInterval(() => {
   Object.keys(allSchedules).forEach(sid => {
+    const txt = formatCountdown(allSchedules[sid].schedule_at);
     const el1 = document.getElementById('cd-m-' + sid);
     const el2 = document.getElementById('cd-d-' + sid);
-    const txt = formatCountdown(allSchedules[sid].schedule_at);
     if (el1) el1.textContent = txt;
     if (el2) el2.textContent = txt;
   });
 }, 1000);
 
 async function handleStart() {
-  if (!isLoggedIn) {
-    return show('Please login first', 'err');
-  }
-
+  if (!isLoggedIn) return show('Please upload session JSON first', 'err');
   const meeting = meetingId.value.trim().replace(/\s/g, '');
   const pass = passcode.value.trim();
   const bots = parseInt(botCount.value) || 10;
@@ -1392,21 +1076,18 @@ async function handleStart() {
   if (!meeting) return show('Meeting ID required', 'err');
 
   const isSchedule = $('enableSchedule').checked;
-
   if (isSchedule) {
     const date = $('scheduleDate').value;
     const time = $('scheduleTime').value;
     if (!date || !time) return show('Select date & time', 'err');
-    const scheduleAt = `${date}T${time}:00`;
     try {
       show('Scheduling...', 'info');
       const r = await fetch(API + '/api/schedule', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           meeting_code: meeting, passcode: pass, bot_count: bots,
           duration_minutes: dur, name_type: type, custom_names: custom,
-          join_mode: currentMode, schedule_at: scheduleAt
+          join_mode: currentMode, schedule_at: `${date}T${time}:00`
         })
       });
       const d = await r.json();
@@ -1421,8 +1102,7 @@ async function handleStart() {
     try {
       show(`Starting ${bots} bots...`, 'info');
       const r = await fetch(API + '/api/start-bots', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           meeting_code: meeting, passcode: pass, bot_count: bots,
           duration_minutes: dur, name_type: type, custom_names: custom,
@@ -1450,13 +1130,11 @@ async function killMeeting(meeting) {
     else show(d.detail || 'Failed', 'err');
   } catch (e) { show(e.message, 'err'); }
 }
-
 async function killBySearch() {
   const meeting = $('searchMeeting').value.trim().replace(/\s/g, '');
   if (!meeting) return show('Enter Meeting ID', 'err');
   await killMeeting(meeting);
 }
-
 async function killAll() {
   if (!confirm('Kill ALL active meetings?')) return;
   try {
@@ -1469,7 +1147,6 @@ async function killAll() {
     else show(d.detail || 'Failed', 'err');
   } catch (e) { show(e.message, 'err'); }
 }
-
 async function deleteSchedule(sid) {
   if (!confirm('Cancel this schedule?')) return;
   try {
@@ -1480,9 +1157,7 @@ async function deleteSchedule(sid) {
 }
 
 setInterval(refresh, 5000);
-setInterval(checkSession, 15000);
 refresh();
-checkSession();
 </script>
 </body>
 </html>
