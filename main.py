@@ -1,5 +1,5 @@
 # ============================================
-# ZOOM BOT CENTRAL – FINAL FIXED
+# ZOOM BOT CENTRAL – FINAL (Stable Counts + Completed Status)
 # ============================================
 import os
 import uuid
@@ -62,14 +62,21 @@ async def disconnect(sid):
         if info.get("sid") == sid:
             tasks_to_remove = [tid for tid, t in running_tasks.items() if t.get("worker_id") == wid]
             for tid in tasks_to_remove:
-                meeting = running_tasks[tid].get("meeting_code")
-                if meeting and meeting in meeting_groups and tid in meeting_groups[meeting].get("task_ids", []):
-                    meeting_groups[meeting]["task_ids"].remove(tid)
+                task = running_tasks[tid]
+                meeting = task.get("meeting_code")
+                bot_count = task.get("bot_count", 0)
+                if meeting and meeting in meeting_groups:
+                    g = meeting_groups[meeting]
+                    if tid in g.get("task_ids", []):
+                        g["task_ids"].remove(tid)
+                    g["completed_bots"] = g.get("completed_bots", 0) + bot_count
+                    if not g["task_ids"]:
+                        g["status"] = "completed"
                 del running_tasks[tid]
             workers[wid]["free_capacity"] = workers[wid]["max_capacity"]
             workers[wid]["sid"] = None
             workers[wid]["last_seen"] = now_ist().isoformat()
-            print(f"[SIO] Worker {wid} disconnected → Capacity restored")
+            print(f"[SIO] Worker {wid} disconnected")
             break
 
 @sio.event
@@ -89,21 +96,30 @@ async def register_worker(sid, data):
 @sio.event
 async def task_completed(sid, data):
     tid = data.get("task_id")
-    if tid and tid in running_tasks:
-        wid = running_tasks[tid].get("worker_id")
-        bot_count = running_tasks[tid].get("bot_count", 0)
-        # Only free capacity – DO NOT reduce meeting total_bots
-        if wid and wid in workers:
-            workers[wid]["free_capacity"] = min(
-                workers[wid]["max_capacity"],
-                workers[wid].get("free_capacity", 0) + bot_count
-            )
-        meeting = running_tasks[tid].get("meeting_code")
-        if meeting and meeting in meeting_groups:
-            if tid in meeting_groups[meeting].get("task_ids", []):
-                meeting_groups[meeting]["task_ids"].remove(tid)
-        del running_tasks[tid]
-        print(f"[SIO] Task completed: {tid} (capacity freed, meeting count unchanged)")
+    if not tid or tid not in running_tasks:
+        return
+    task = running_tasks[tid]
+    wid = task.get("worker_id")
+    bot_count = task.get("bot_count", 0)
+    meeting = task.get("meeting_code")
+
+    if wid and wid in workers:
+        workers[wid]["free_capacity"] = min(
+            workers[wid]["max_capacity"],
+            workers[wid].get("free_capacity", 0) + bot_count
+        )
+
+    if meeting and meeting in meeting_groups:
+        g = meeting_groups[meeting]
+        if tid in g.get("task_ids", []):
+            g["task_ids"].remove(tid)
+        g["completed_bots"] = g.get("completed_bots", 0) + bot_count
+        if not g["task_ids"]:
+            g["status"] = "completed"
+            print(f"[SIO] Meeting {meeting} → COMPLETED")
+
+    del running_tasks[tid]
+    print(f"[SIO] Task {tid} completed | capacity freed")
 
 @app.get("/health")
 async def health():
@@ -141,7 +157,7 @@ async def update_session(request: Request):
             "message": "Session updated successfully ✓",
             "login_in_progress": False
         })
-        print("✅ Session JSON updated successfully")
+        print("✅ Session JSON updated")
         return {"success": True, "message": "Session saved successfully"}
     except Exception as e:
         raise HTTPException(400, f"Failed to save session: {str(e)}")
@@ -158,9 +174,11 @@ async def status():
         meetings[meeting] = {
             "meeting_code": meeting,
             "total_bots": info.get("total_bots", 0),
+            "completed_bots": info.get("completed_bots", 0),
             "name_type": info.get("name_type", "indian"),
             "started_at": info.get("started_at"),
-            "join_mode": info.get("join_mode", "individual")
+            "join_mode": info.get("join_mode", "individual"),
+            "status": info.get("status", "running")
         }
 
     return {
@@ -189,7 +207,6 @@ async def start_bots(req: StartBotRequest):
     assigned = []
     connected = {wid: info for wid, info in workers.items() if info.get("sid")}
     sorted_workers = sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True)
-
     name_offset = 0
 
     for wid, info in sorted_workers:
@@ -204,7 +221,7 @@ async def start_bots(req: StartBotRequest):
 
         custom_slice = None
         if req.custom_names and req.name_type == "custom":
-            custom_slice = req.custom_names[name_offset : name_offset + give]
+            custom_slice = req.custom_names[name_offset: name_offset + give]
             name_offset += give
 
         payload = {
@@ -217,7 +234,6 @@ async def start_bots(req: StartBotRequest):
             "custom_names": custom_slice,
             "join_mode": req.join_mode or "individual"
         }
-
         await sio.emit("new_task", payload, to=info["sid"])
 
         running_tasks[task_id] = {
@@ -235,13 +251,16 @@ async def start_bots(req: StartBotRequest):
             meeting_groups[meeting] = {
                 "task_ids": [],
                 "total_bots": 0,
+                "completed_bots": 0,
                 "name_type": payload["name_type"],
                 "join_mode": req.join_mode or "individual",
-                "started_at": now_ist().isoformat()
+                "started_at": now_ist().isoformat(),
+                "status": "running"
             }
 
         meeting_groups[meeting]["task_ids"].append(task_id)
         meeting_groups[meeting]["total_bots"] += give
+        meeting_groups[meeting]["status"] = "running"
 
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
@@ -326,10 +345,10 @@ async def terminate(req: Optional[TerminateRequest] = None):
 
 @app.post("/api/shutdown")
 async def shutdown_server():
-    print("🛑 SHUTDOWN requested from dashboard")
+    print("🛑 SHUTDOWN requested")
     for wid, info in workers.items():
         if info.get("sid"):
-            await sio.emit("shutdown", {"message": "Server is shutting down"}, to=info["sid"])
+            await sio.emit("shutdown", {"message": "Server shutting down"}, to=info["sid"])
     await asyncio.sleep(1.5)
     os.kill(os.getpid(), signal.SIGTERM)
     return {"success": True, "message": "Shutdown signal sent"}
@@ -434,6 +453,7 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
 .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
 .badge-slow{background:#422006;color:#fbbf24}.badge-together{background:#064e3b;color:#34d399}
 .badge-indian{background:#1e3a5f;color:#93c5fd}.badge-english{background:#064e3b;color:#6ee7b7}.badge-custom{background:#4c1d95;color:#c4b5fd}
+.badge-running{background:#064e3b;color:#34d399}.badge-completed{background:#334155;color:#94a3b8}
 .countdown{font-family:ui-monospace,monospace;color:var(--warning);font-weight:600;font-size:12px}
 .search-row{display:flex;gap:8px;margin-bottom:12px}
 .search-row input{flex:1;padding:10px 13px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;min-width:0}
@@ -496,7 +516,6 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
           </select>
         </div>
       </div>
-
       <div id="customBox" style="display:none;margin-top:12px;padding:14px;background:#0f172a;border:1px solid var(--border);border-radius:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label style="font-size:13px;font-weight:600;color:#93c5fd;">✏️ Custom Names</label>
@@ -511,7 +530,6 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('customNames').value='';updCount();">Clear</button>
         </div>
       </div>
-
       <div class="form-group"><label>Duration (minutes)</label><input type="number" id="duration" value="120" min="1"/></div>
       <div class="schedule-box">
         <label class="schedule-check"><input type="checkbox" id="enableSchedule" onchange="toggleSchedule()"/> Enable Scheduling</label>
@@ -529,21 +547,21 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
 
     <div style="display:flex;flex-direction:column;gap:16px;">
       <div class="card">
-        <div class="section-title">🟢 Active Meetings</div>
+        <div class="section-title">🟢 Meetings</div>
         <div class="search-row">
           <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()"/>
           <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
         </div>
-        <div id="activeListMobile" class="mobile-only"><div class="empty">No active meetings</div></div>
+        <div id="activeListMobile" class="mobile-only"><div class="empty">No meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Started</th><th>Mode</th><th>Names</th><th></th></tr></thead>
-            <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr></tbody>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Status</th><th>Started</th><th>Mode</th><th></th></tr></thead>
+            <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr></tbody>
           </table>
         </div>
       </div>
       <div class="card">
-        <div class="section-title">📅 Scheduled Meetings</div>
+        <div class="section-title">📅 Scheduled</div>
         <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled meetings</div></div>
         <div class="desktop-only table-wrap">
           <table>
@@ -559,7 +577,7 @@ tr.highlight td{background:#1e3a5f!important;border-left:3px solid var(--primary
 <div class="modal-overlay" id="shutdownModal">
   <div class="modal">
     <h3>🛑 Shutdown Server?</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">All connected workers/notebooks will be closed. Type <b>yes</b> to confirm.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">All workers will close. Type <b>yes</b> to confirm.</p>
     <input type="text" id="shutdownConfirm" placeholder="Type yes"/>
     <div style="display:flex;gap:10px;margin-top:8px;">
       <button class="btn btn-danger" style="flex:1" onclick="confirmShutdown()">Shutdown</button>
@@ -576,7 +594,7 @@ function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='i
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
 function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
 function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
-function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅ Ready</span>':` <span style="color:#ef4444">❌ ${b-n.length} more needed</span>`}
+function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅ Ready</span>':` <span style="color:#ef4444">❌ ${b-n.length} more</span>`}
 customNames.addEventListener('input',updCount);
 function updateClock(){liveTime.textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'}
 setInterval(updateClock,1000);updateClock();
@@ -586,15 +604,76 @@ function toggleSessionBox(){const b=$('sessionEditBox'),btn=$('toggleSessionBtn'
 function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value=''}
 function updateSessionUI(s){const badge=$('sessionBadge'),st=$('sessionStatusText');isLoggedIn=!!s.logged_in;if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st){st.textContent=s.message||'Session active';st.style.color='#34d399'}}else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st){st.textContent=s.message||'No session file';st.style.color='#fca5a5'}}}
 
-async function saveSession(){const raw=$('sessionJson').value.trim();if(!raw)return show('Please paste session JSON','err');let data;try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON format','err')}if(!data.cookies)return show('JSON must contain "cookies"','err');try{show('Saving session...','info');const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();if(r.ok){show('✅ Session saved successfully!','ok');$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value='';if($('sessionStatusText')){$('sessionStatusText').textContent='Session updated just now ✓';$('sessionStatusText').style.color='#34d399'}setTimeout(refresh,600)}else show(d.detail||'Save failed','err')}catch(e){show(e.message,'err')}}
+async function saveSession(){const raw=$('sessionJson').value.trim();if(!raw)return show('Please paste session JSON','err');let data;try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}if(!data.cookies)return show('Must contain cookies','err');try{show('Saving...','info');const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();if(r.ok){show('✅ Session saved!','ok');$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value='';if($('sessionStatusText')){$('sessionStatusText').textContent='Session updated ✓';$('sessionStatusText').style.color='#34d399'}setTimeout(refresh,600)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
 
-function renderActive(meetings){allMeetings=meetings;const search=($('searchMeeting').value||'').trim().toLowerCase();let filtered=Object.entries(meetings);if(search)filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));if(!filtered.length){activeListMobile.innerHTML='<div class="empty">No active meetings</div>';tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No active meetings</td></tr>';return}
-activeListMobile.innerHTML=filtered.map(([meeting,m])=>{const bots=m.total_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-',isH=search&&meeting.toLowerCase().includes(search);return`<div class="meeting-card ${isH?'highlight':''}"><div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${bots}</div></div><div class="mc-meta"><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span><span class="badge badge-${type}">${type}</span></div><div class="mc-bottom"><span>Started: ${startTime}</span><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></div></div>`}).join('');
-let idx=0;tbodyActive.innerHTML=filtered.map(([meeting,m])=>{idx++;const bots=m.total_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-',isH=search&&meeting.toLowerCase().includes(search);return`<tr class="${isH?'highlight':''}"><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${meeting}</td><td><strong style="color:#fbbf24">${bots}</strong></td><td>${startTime}</td><td><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span></td><td><span class="badge badge-${type}">${type}</span></td><td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td></tr>`}).join('')}
+function renderActive(meetings){
+  allMeetings=meetings;
+  const search=($('searchMeeting').value||'').trim().toLowerCase();
+  let filtered=Object.entries(meetings);
+  if(search) filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));
+  if(!filtered.length){
+    activeListMobile.innerHTML='<div class="empty">No meetings</div>';
+    tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr>';
+    return;
+  }
+  activeListMobile.innerHTML=filtered.map(([meeting,m])=>{
+    const total=m.total_bots||0, done=m.completed_bots||0, type=m.name_type||'indian', mode=m.join_mode||'individual';
+    const status=m.status||'running', startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
+    const isH=search&&meeting.toLowerCase().includes(search);
+    return `<div class="meeting-card ${isH?'highlight':''}">
+      <div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${done}/${total}</div></div>
+      <div class="mc-meta">
+        <span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span>
+        <span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span>
+        <span class="badge badge-${type}">${type}</span>
+      </div>
+      <div class="mc-bottom"><span>Started: ${startTime}</span>
+        <button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button>
+      </div></div>`;
+  }).join('');
+  let idx=0;
+  tbodyActive.innerHTML=filtered.map(([meeting,m])=>{
+    idx++;
+    const total=m.total_bots||0, done=m.completed_bots||0, type=m.name_type||'indian', mode=m.join_mode||'individual';
+    const status=m.status||'running', startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
+    const isH=search&&meeting.toLowerCase().includes(search);
+    return `<tr class="${isH?'highlight':''}">
+      <td>${idx}</td><td style="font-weight:600;color:#93c5fd">${meeting}</td>
+      <td><strong style="color:#fbbf24">${done}/${total}</strong></td>
+      <td><span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span></td>
+      <td>${startTime}</td>
+      <td><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="killMeeting('${meeting}')">Kill</button></td></tr>`;
+  }).join('');
+}
 
-function renderSchedules(schedules){allSchedules=schedules;const entries=Object.entries(schedules);if(!entries.length){scheduleListMobile.innerHTML='<div class="empty">No scheduled meetings</div>';tbodySchedule.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';return}
-scheduleListMobile.innerHTML=entries.map(([sid,s])=>{const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});return`<div class="meeting-card"><div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div><div class="mc-meta"><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span><span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div><div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`}).join('');
-let idx=0;tbodySchedule.innerHTML=entries.map(([sid,s])=>{idx++;const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});return`<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td><td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td><td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td><td><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span></td><td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('')}
+function renderSchedules(schedules){
+  allSchedules=schedules;
+  const entries=Object.entries(schedules);
+  if(!entries.length){
+    scheduleListMobile.innerHTML='<div class="empty">No scheduled meetings</div>';
+    tbodySchedule.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled meetings</td></tr>';
+    return;
+  }
+  scheduleListMobile.innerHTML=entries.map(([sid,s])=>{
+    const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="meeting-card"><div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div>
+      <div class="mc-meta"><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span>
+      <span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div>
+      <div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div>
+      <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`;
+  }).join('');
+  let idx=0;
+  tbodySchedule.innerHTML=entries.map(([sid,s])=>{
+    idx++;
+    const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+    return `<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
+      <td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td>
+      <td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td>
+      <td><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`;
+  }).join('');
+}
 
 function filterMeetings(){renderActive(allMeetings)}
 
@@ -608,14 +687,14 @@ async function refresh(){
     totalCapMax.textContent=d.total_capacity||0;
     renderActive(d.meetings||{});
     renderSchedules(d.schedules||{});
-    show(`Refreshed • ${connected} worker(s) connected`,'ok');
-  }catch(e){show(e.message||'Failed to refresh','err')}
+    show(`Refreshed • ${connected} worker(s)`,'ok');
+  }catch(e){show(e.message||'Failed','err')}
 }
 
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
 
 async function handleStart(){
-  if(!isLoggedIn) return show('Please upload session JSON first','err');
+  if(!isLoggedIn) return show('Upload session JSON first','err');
   const meeting=meetingId.value.trim().replace(/\s/g,''),pass=passcode.value.trim(),bots=parseInt(botCount.value)||10,dur=parseInt(duration.value)||120,type=nameType.value;
   let custom=null;
   if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);if(custom.length<bots)return show('Need more custom names','err')}
@@ -642,12 +721,12 @@ async function handleStart(){
 
 async function killMeeting(meeting){if(!confirm(`Kill all bots for ${meeting}?`))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})});const d=await r.json();if(r.ok){show(d.message||'Killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
 async function killBySearch(){const meeting=$('searchMeeting').value.trim().replace(/\s/g,'');if(!meeting)return show('Enter Meeting ID','err');await killMeeting(meeting)}
-async function killAll(){if(!confirm('Kill ALL active meetings?'))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json();if(r.ok){show('All killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
-async function deleteSchedule(sid){if(!confirm('Cancel this schedule?'))return;try{const r=await fetch(API+'/api/schedule/'+sid,{method:'DELETE'});if(r.ok){show('Cancelled','ok');setTimeout(refresh,400)}else show('Failed','err')}catch(e){show(e.message,'err')}}
+async function killAll(){if(!confirm('Kill ALL meetings?'))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json();if(r.ok){show('All killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
+async function deleteSchedule(sid){if(!confirm('Cancel schedule?'))return;try{const r=await fetch(API+'/api/schedule/'+sid,{method:'DELETE'});if(r.ok){show('Cancelled','ok');setTimeout(refresh,400)}else show('Failed','err')}catch(e){show(e.message,'err')}}
 
 function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdownConfirm').value='';$('shutdownConfirm').focus()}
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
-async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Please type "yes" to confirm');return}try{show('Sending shutdown signal...','info');const r=await fetch(API+'/api/shutdown',{method:'POST'});const d=await r.json();show(d.message||'Shutdown sent','ok');closeShutdownModal()}catch(e){show('Server is shutting down...','ok');closeShutdownModal()}}
+async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type "yes" to confirm');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Server shutting down...','ok');closeShutdownModal()}}
 
 setInterval(refresh,5000);refresh();
 </script>
