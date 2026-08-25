@@ -581,7 +581,134 @@ const API=location.origin;const $=id=>document.getElementById(id);
   const saved=localStorage.getItem('zcc-theme')||'dark';
   applyTheme(saved);
 })();
-function """
+function applyTheme(theme){
+  if(theme==='system'){
+    document.documentElement.removeAttribute('data-theme');
+  }else{
+    document.documentElement.setAttribute('data-theme',theme);
+  }
+  localStorage.setItem('zcc-theme',theme);
+}
+function setTheme(theme){applyTheme(theme);$('themeMenu').classList.remove('show')}
+function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
+document.addEventListener('click',e=>{
+  const p=document.querySelector('.theme-pop');
+  if(p && !p.contains(e.target)) $('themeMenu').classList.remove('show');
+});
+let currentMode='individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
+function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
+function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
+function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
+function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
+function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅ Ready</span>':` <span style="color:#ef4444">❌ ${b-n.length} more</span>`}
+customNames.addEventListener('input',updCount);
+function updateClock(){liveTime.textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'}
+setInterval(updateClock,1000);updateClock();
+function formatCountdown(iso){try{const t=new Date(iso),n=new Date();let d=Math.floor((t-n)/1000);if(d<=0)return'Triggering...';const h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;return h>0?`${h}h ${m}m ${s}s`:`${m}m ${s}s`}catch{return'-'}}
+function toggleSessionBox(){const b=$('sessionEditBox'),btn=$('toggleSessionBtn');if(b.style.display==='none'){b.style.display='block';btn.textContent='✕ Close'}else{b.style.display='none';btn.textContent='✏️ Update Session'}}
+function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value=''}
+function updateSessionUI(s){const badge=$('sessionBadge'),st=$('sessionStatusText');isLoggedIn=!!s.logged_in;if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st){st.textContent=s.message||'Session active';st.style.color='#34d399'}}else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st){st.textContent=s.message||'No session';st.style.color='#fca5a5'}}}
+async function saveSession(){const raw=$('sessionJson').value.trim();if(!raw)return show('Paste session JSON','err');let data;try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}if(!data.cookies)return show('Must contain cookies','err');try{show('Saving...','info');const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();if(r.ok){show('✅ Session saved!','ok');$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value='';if($('sessionStatusText')){$('sessionStatusText').textContent='Session updated ✓';$('sessionStatusText').style.color='#34d399'}setTimeout(refresh,600)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
+function renderLogs(logs){const panel=$('logPanel');if(!logs||!logs.length){panel.innerHTML='<div style="color:var(--muted)">No logs yet</div>';return}panel.innerHTML=logs.map(l=>{const cls=l.level==='ok'?'ok':l.level==='err'?'err':'info';return `<div class="log-line ${cls}"><span class="t">${l.time}</span><span class="m">[${l.meeting}]</span>${l.message}</div>`}).join('');panel.scrollTop=panel.scrollHeight}
+async function refreshLogs(){try{const q=activeLogMeeting?`?meeting=${encodeURIComponent(activeLogMeeting)}&limit=150`:'?limit=120';const r=await fetch(API+'/api/logs'+q);const d=await r.json();renderLogs(d.logs||[]);$('logFilterLabel').textContent=activeLogMeeting?'• '+activeLogMeeting:'• All'}catch(e){}}
+function selectMeetingLogs(meeting){activeLogMeeting=meeting;refreshLogs();show('Logs: '+meeting,'info')}
+function clearLogFilter(){activeLogMeeting=null;refreshLogs()}
+function renderActive(meetings){
+  allMeetings=meetings;
+  const search=($('searchMeeting').value||'').trim().toLowerCase();
+  let filtered=Object.entries(meetings);
+  if(search) filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));
+  if(!filtered.length){activeListMobile.innerHTML='<div class="empty">No meetings</div>';tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr>';return}
+  activeListMobile.innerHTML=filtered.map(([meeting,m])=>{
+    const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
+    const status=m.status||'running',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
+    const sel=activeLogMeeting===meeting?'selected':'';
+    return `<div class="meeting-card ${sel}" onclick="selectMeetingLogs('${meeting}')">
+      <div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${done}/${total}</div></div>
+      <div class="mc-meta">
+        <span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span>
+        <span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span>
+        <span class="badge badge-${type}">${type}</span>
+      </div>
+      <div class="mc-bottom"><span>${startTime}</span>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button>
+      </div></div>`}).join('');
+  let idx=0;
+  tbodyActive.innerHTML=filtered.map(([meeting,m])=>{
+    idx++;
+    const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
+    const status=m.status||'running',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
+    const sel=activeLogMeeting===meeting?'selected':'';
+    return `<tr class="${sel}" style="cursor:pointer" onclick="selectMeetingLogs('${meeting}')">
+      <td>${idx}</td><td style="font-weight:600;color:#93c5fd">${meeting}</td>
+      <td><strong style="color:#fbbf24">${done}/${total}</strong></td>
+      <td><span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span></td>
+      <td>${startTime}</td>
+      <td><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button></td></tr>`}).join('');
+}
+function renderSchedules(schedules){
+  allSchedules=schedules;const entries=Object.entries(schedules);
+  if(!entries.length){scheduleListMobile.innerHTML='<div class="empty">No scheduled</div>';tbodySchedule.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled</td></tr>';return}
+  scheduleListMobile.innerHTML=entries.map(([sid,s])=>{
+    const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="meeting-card"><div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div>
+      <div class="mc-meta"><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span>
+      <span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div>
+      <div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div>
+      <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`}).join('');
+  let idx=0;
+  tbodySchedule.innerHTML=entries.map(([sid,s])=>{
+    idx++;const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+    return `<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
+      <td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td>
+      <td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td>
+      <td><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('');
+}
+function filterMeetings(){renderActive(allMeetings)}
+async function refresh(){try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}}
+setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
+async function handleStart(){
+  if(!isLoggedIn) return show('Upload session JSON first','err');
+  const meeting=meetingId.value.trim().replace(/\s/g,'');
+  const pass=passcode.value;
+  const bots=parseInt(botCount.value)||10,dur=parseInt(duration.value)||120,type=nameType.value;
+  let custom=null;
+  if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);if(custom.length<bots)return show('Need more custom names','err')}
+  if(!meeting) return show('Meeting ID required','err');
+  const isSchedule=$('enableSchedule').checked;
+  if(isSchedule){
+    const date=$('scheduleDate').value,time=$('scheduleTime').value;
+    if(!date||!time) return show('Select date & time','err');
+    try{show('Scheduling...','info');
+      const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});
+      const d=await r.json();
+      if(r.ok){show(d.message||'Scheduled!','ok');$('enableSchedule').checked=false;toggleSchedule();setTimeout(refresh,500)}
+      else show(d.detail||'Failed','err');
+    }catch(e){show(e.message,'err')}
+  }else{
+    try{show(`Starting ${bots} bots...`,'info');
+      const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});
+      const d=await r.json();
+      if(r.ok){show(d.message||'Started!','ok');setTimeout(refresh,500)}
+      else show(d.detail||'Failed','err');
+    }catch(e){show(e.message,'err')}
+  }
+}
+async function killMeeting(meeting){if(!confirm(`Kill ${meeting}?`))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})});const d=await r.json();if(r.ok){show(d.message||'Killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
+async function killBySearch(){const meeting=$('searchMeeting').value.trim().replace(/\s/g,'');if(!meeting)return show('Enter Meeting ID','err');await killMeeting(meeting)}
+async function killAll(){if(!confirm('Kill ALL?'))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json();if(r.ok){show('All killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
+async function deleteSchedule(sid){if(!confirm('Cancel?'))return;try{const r=await fetch(API+'/api/schedule/'+sid,{method:'DELETE'});if(r.ok){show('Cancelled','ok');setTimeout(refresh,400)}else show('Failed','err')}catch(e){show(e.message,'err')}}
+function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdownConfirm').value='';$('shutdownConfirm').focus()}
+function closeShutdownModal(){$('shutdownModal').style.display='none'}
+async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type yes');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Shutting down...','ok');closeShutdownModal()}}
+setInterval(refresh,5000);
+setInterval(refreshLogs,3000);
+refresh();
+</script>
+</body>
+</html>"""
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
