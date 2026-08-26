@@ -1,5 +1,6 @@
 # ============================================
-# ZOOM BOT CENTRAL – UNIQUE FIRST NAMES + ACTIVE COUNT FIX
+# ZOOM BOT CENTRAL – FINAL
+# unique names | hard kill | capacity lock | schedule
 # ============================================
 import os, uuid, asyncio, json, signal, random
 from collections import deque
@@ -22,22 +23,36 @@ asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 workers, running_tasks, meeting_groups, scheduled_tasks = {}, {}, {}, {}
 session_status = {"logged_in": False, "last_checked": None, "message": "No session file", "login_in_progress": False}
 meeting_logs, global_logs = {}, deque(maxlen=400)
-
-# Per-meeting used first names (lowercase) — never reuse across workers
-meeting_used_firsts = {}  # meeting -> set of first names
+meeting_used_firsts = {}
 
 INDIAN_FIRST_POOL = [
     "Aarav","Vivaan","Aditya","Vihaan","Arjun","Reyansh","Ayaan","Krishna","Ishaan","Shaurya",
     "Rahul","Rohan","Priya","Ananya","Diya","Saanvi","Aadhya","Kavya","Riya","Anika",
     "Amit","Rajesh","Sneha","Pooja","Neha","Vikram","Karan","Manish","Suresh","Deepak",
     "Ankit","Siddharth","Kunal","Nikhil","Harsh","Yash","Aryan","Kabir","Dev","Rudra",
-    "Ayaansh","Atharv","Darsh","Ira","Myra","Anvi","Kiara","Pari","Navya","Shanaya",
-    "Rudraansh","Veer","Shaunak","Om","Yuvraj","Pranav","Dhruv","Kartik","Laksh","Rian",
-    "Samar","Advait","Reyansh","Kabira","Nirvaan","Aarush","Vihaan","Shaurya","Arnav","Raghav",
-    "Tanvi","Isha","Meera","Sara","Aisha","Zara","Inaaya","Anaya","Kyra","Misha",
+    "Atharv","Darsh","Ira","Myra","Anvi","Kiara","Pari","Navya","Shanaya","Veer",
+    "Om","Yuvraj","Pranav","Dhruv","Kartik","Laksh","Rian","Samar","Advait","Arnav",
+    "Raghav","Tanvi","Isha","Meera","Sara","Aisha","Zara","Inaaya","Anaya","Kyra",
     "Rishi","Varun","Nitin","Pankaj","Gaurav","Sachin","Rohit","Vivek","Ashish","Mohit",
     "Sunita","Kavita","Jyoti","Rekha","Geeta","Seema","Nisha","Ritu","Swati","Preeti",
-    "Farhan","Imran","Zoya","Ayaan","Rehan","Samir","Kabir","Aamir","Naina","Alisha",
+    "Farhan","Imran","Zoya","Rehan","Samir","Aamir","Naina","Alisha","Nirvaan","Aarush",
+    "Viaan","Shivansh","Parth","Yug","Agastya","Viraj","Shaunak","Kiaan","Ahaan","Neel",
+    "Avi","Daksh","Shiven","Aariv","Kian","Arhaan","Zayan","Ivaan","Ansh","Riyan",
+    "Jai","Veeraj","Saanvika","Aarohi","Amaira","Siya","Avni","Meher","Noor","Sana",
+    "Alia","Kriti","Shreya","Aditi","Ishita","Tanya","Ritika","Pallavi","Shruti","Nikita",
+    "Komal","Payal","Ruchi","Manav","Aman","Sahil","Akash","Naveen","Sanjay","Ramesh",
+    "Mahesh","Dinesh","Rakesh","Naresh","Mukesh","Paresh","Abhinav","Abhishek","Aakash","Anuj",
+    "Ashutosh","Bhavesh","Chirag","Darshan","Eshan","Faisal","Gagan","Hemant","Inder","Jatin",
+    "Kaushal","Lalit","Mayank","Naman","Onkar","Pratik","Rajat","Sagar","Tarun","Uday",
+    "Vinay","Wasim","Yatin","Zeeshan","Arpit","Bhavya","Charu","Divya","Ekta","Garima",
+    "Heena","Ipsita","Jaya","Kirti","Lavanya","Madhavi","Nandini","Pragya","Radhika","Sakshi",
+    "Trisha","Urvashi","Vaishnavi","Yamini","Ayesha","Bhavika","Chhavi","Drishti","Eshita","Fiza",
+    "Gunjan","Hrithik","Ishan","Jitesh","Kshitij","Lokesh","Mihir","Niraj","Omkar","Pranay",
+    "Rishabh","Tushar","Utkarsh","Vishal","Anshul","Brijesh","Chetan","Devansh","Eshaan","Faraz",
+    "Girish","Hitesh","Iqbal","Jaspreet","Luv","Manjot","Navjot","Puneet","Simran","Ujjwal",
+    "Harpreet","Gurpreet","Jasleen","Manpreet","Navdeep","Amrit","Aaradhya","Bhavna","Chandni","Deepika",
+    "Gayatri","Hema","Indira","Janhvi","Kajal","Lata","Mamta","Namrata","Prerna","Rashmi",
+    "Sonal","Tanisha","Vandana","Yashika","Ayesha","Chitra","Damini","Fatima","Oviya","Waheeda",
 ]
 EN_FIRST_POOL = [
     "James","John","Michael","David","Emily","Emma","Olivia","Daniel","Matthew","Sarah",
@@ -46,7 +61,24 @@ EN_FIRST_POOL = [
     "Sophia","Isabella","Mia","Charlotte","Amelia","Harper","Evelyn","Abigail","Ella","Scarlett",
     "Henry","Alexander","Samuel","Benjamin","Gabriel","Carter","Wyatt","Julian","Grayson","Leo",
     "Grace","Chloe","Victoria","Riley","Aria","Lily","Zoey","Nora","Hazel","Aurora",
+    "Owen","Caleb","Isaac","Luke","Nathan","Aaron","Adam","Adrian","Alan","Albert",
+    "Alice","Amy","Andrea","Angela","Anna","Anne","Ashley","Barbara","Betty","Brenda",
+    "Brian","Bruce","Bryan","Carl","Carol","Catherine","Christine","Cynthia","Deborah","Denise",
+    "Dennis","Diana","Diane","Donald","Donna","Doris","Dorothy","Douglas","Edward","Elizabeth",
+    "Eric","Frances","Frank","Fred","Gary","George","Gerald","Gloria","Gregory","Harold",
+    "Helen","Irene","Janet","Janice","Jean","Jeffrey","Jennifer","Jeremy","Jerry","Jesse",
+    "Joan","Joe","Johnny","Jonathan","Jordan","Jose","Joyce","Juan","Judith","Judy",
+    "Julia","Julie","Karen","Kathleen","Kathryn","Keith","Kelly","Kenneth","Kevin","Kimberly",
+    "Larry","Laura","Lawrence","Linda","Lisa","Lois","Louis","Louise","Margaret","Maria",
+    "Marie","Marilyn","Mark","Martha","Martin","Mary","Melissa","Michelle","Mildred","Nancy",
+    "Natalie","Nicholas","Nicole","Norman","Pamela","Patricia","Patrick","Paul","Paula","Peter",
+    "Philip","Rachel","Ralph","Raymond","Rebecca","Richard","Roger","Ronald","Rose","Roy",
+    "Russell","Ruth","Samantha","Sandra","Sara","Scott","Sean","Sharon","Shirley","Stephanie",
+    "Stephen","Steven","Susan","Teresa","Terry","Theresa","Timothy","Tina","Todd","Troy",
+    "Victor","Virginia","Walter","Wayne","Wendy","Elliot","Silas","Clara","Mila","Lila","Ezra",
 ]
+_INDIAN_PREFIX = ["Aa","Vi","Ad","Ar","Re","Kr","Is","Sh","Ra","Ro","An","Di","Sa","Ka","Ri","Am","Ne","Su","De","Si","Om","Yu","Pr","Dh","La","Ha","Na","Ja","Ma","Pa","Ta","Ga","Ve","Ch","Bh","Tr"]
+_INDIAN_SUFFIX = ["rav","haan","itya","jun","ansh","ish","aurya","hul","han","anya","ya","anvi","vya","it","esh","epak","vik","yan","eet","isha","ika","ita","ani","eep","adev","ika","esh"]
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -56,28 +88,37 @@ def add_log(meeting, message, level="info"):
         meeting_logs.setdefault(meeting, deque(maxlen=500)).append(line)
     print(f"[{ts}] [{meeting or '-'}] {message}", flush=True)
 
+def _synthetic_indian_first(used: set) -> str:
+    for _ in range(300):
+        name = random.choice(_INDIAN_PREFIX) + random.choice(_INDIAN_SUFFIX)
+        name = name[0].upper() + name[1:].lower()
+        if name.lower() not in used and len(name) >= 4 and not name.lower().startswith("user"):
+            return name
+    return "Aarav" + random.choice(["esh", "ansh", "yan", "ika"])
+
 def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str]:
-    """Return `count` unique first names never used before in this meeting."""
     used = meeting_used_firsts.setdefault(meeting, set())
     pool = list(EN_FIRST_POOL if name_type == "english" else INDIAN_FIRST_POOL)
     random.shuffle(pool)
     out = []
-    # first pass: unused from pool
     for f in pool:
         if len(out) >= count:
             break
         key = f.lower()
-        if key not in used and key != "mj":
+        if key not in used and key != "mj" and not key.startswith("user"):
             used.add(key)
             out.append(f)
-    # overflow: generated unique tokens
-    n = 1
     while len(out) < count:
-        base = f"User{n}"
-        if base.lower() not in used:
-            used.add(base.lower())
-            out.append(base)
-        n += 1
+        if name_type == "english":
+            name = random.choice(["Elliot", "Owen", "Silas", "Clara", "Mila", "Nora", "Lila", "Ezra", "Miles", "Chloe"])
+            if name.lower() in used:
+                name = random.choice(["Alex", "Sam", "Jordan", "Casey", "Riley", "Quinn"]) + random.choice(["a", "e", "y", ""])
+        else:
+            name = _synthetic_indian_first(used)
+        key = name.lower()
+        if key not in used and key != "mj" and not key.startswith("user"):
+            used.add(key)
+            out.append(name)
     return out
 
 class StartBotRequest(BaseModel):
@@ -109,13 +150,12 @@ async def connect(sid, environ):
 
 @sio.event
 async def disconnect(sid):
-    # Capacity LOCKED on disconnect — orphans may still be in Zoom
     for wid, info in list(workers.items()):
         if info.get("sid") == sid:
             workers[wid]["sid"] = None
             workers[wid]["last_seen"] = now_ist().isoformat()
             orphan = [t for t, x in running_tasks.items() if x.get("worker_id") == wid]
-            add_log("-", f"Worker {wid} disconnected | {len(orphan)} task(s) still reserved — Kill to free", "err")
+            add_log("-", f"Worker {wid} disconnected | {len(orphan)} task(s) reserved — Kill to free", "err")
             break
 
 @sio.event
@@ -125,7 +165,6 @@ async def register_worker(sid, data):
     now = now_ist().isoformat()
     if wid in workers:
         workers[wid].update({"sid": sid, "max_capacity": max_cap, "last_seen": now})
-        # do not reset free_capacity on re-register if tasks still reserved
         if "free_capacity" not in workers[wid]:
             workers[wid]["free_capacity"] = max_cap
     else:
@@ -200,11 +239,7 @@ async def status():
     connected = {w: i for w, i in workers.items() if i.get("sid")}
     meetings = {}
     for m, g in meeting_groups.items():
-        active = sum(
-            running_tasks[tid].get("bot_count", 0)
-            for tid in g.get("task_ids", [])
-            if tid in running_tasks
-        )
+        active = sum(running_tasks[tid].get("bot_count", 0) for tid in g.get("task_ids", []) if tid in running_tasks)
         meetings[m] = {
             "meeting_code": m,
             "total_bots": g.get("total_bots", 0),
@@ -242,23 +277,19 @@ async def start_bots(req: StartBotRequest):
     remaining, assigned = req.bot_count, []
     name_type = req.name_type or "indian"
 
-    # Pre-allocate unique first names for entire request (cross-worker unique)
     if name_type == "custom" and req.custom_names:
-        # custom: also enforce unique first tokens
-        firsts = []
-        used_local = meeting_used_firsts.setdefault(meeting, set())
+        firsts, used_local = [], meeting_used_firsts.setdefault(meeting, set())
         for raw in req.custom_names:
             if len(firsts) >= req.bot_count:
                 break
-            token = (raw.strip().split() or ["Bot"])[0]
+            token = (raw.strip().split() or ["Aarav"])[0]
             key = token.lower()
-            if key in used_local or key == "mj":
+            if key in used_local or key == "mj" or key.startswith("user"):
                 continue
             used_local.add(key)
             firsts.append(raw.strip())
-        while len(firsts) < req.bot_count:
-            extra = allocate_unique_firsts(meeting, req.bot_count - len(firsts), "indian")
-            firsts.extend(extra)
+        if len(firsts) < req.bot_count:
+            firsts.extend(allocate_unique_firsts(meeting, req.bot_count - len(firsts), "indian"))
         all_firsts = firsts[:req.bot_count]
     else:
         all_firsts = allocate_unique_firsts(meeting, req.bot_count, name_type)
@@ -275,19 +306,11 @@ async def start_bots(req: StartBotRequest):
         task_id = str(uuid.uuid4())[:8]
         slice_firsts = all_firsts[offset:offset + give]
         offset += give
-        custom_slice = None
-        if name_type == "custom":
-            custom_slice = slice_firsts  # full custom strings already unique-first
-
+        custom_slice = slice_firsts if name_type == "custom" else None
         payload = {
-            "task_id": task_id,
-            "meeting_code": meeting,
-            "passcode": passcode,
-            "bot_count": give,
-            "duration_minutes": req.duration_minutes,
-            "name_type": name_type,
-            "custom_names": custom_slice,
-            "assigned_first_names": slice_firsts,  # unique first names for this worker batch
+            "task_id": task_id, "meeting_code": meeting, "passcode": passcode, "bot_count": give,
+            "duration_minutes": req.duration_minutes, "name_type": name_type,
+            "custom_names": custom_slice, "assigned_first_names": slice_firsts,
             "join_mode": req.join_mode or "individual",
         }
         await sio.emit("new_task", payload, to=info["sid"])
@@ -312,7 +335,7 @@ async def start_bots(req: StartBotRequest):
     if not assigned:
         raise HTTPException(503, "No free workers")
     started = req.bot_count - remaining
-    add_log(meeting, f"🚀 Started {started} bots | unique first-names | mode={req.join_mode}", "ok")
+    add_log(meeting, f"🚀 Started {started} bots | unique names | mode={req.join_mode}", "ok")
     return {"success": True, "message": f"Started {started} bots for {meeting}", "assigned": assigned, "remaining_unassigned": remaining}
 
 @app.post("/api/schedule")
@@ -424,10 +447,9 @@ async def startup_event():
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Server started", "ok")
 
-# HTML: apna Control Deck paste karo (pehle wala). Sirf bots column active_bots use kare:
-# const active = (m.active_bots != null) ? m.active_bots : (m.total_bots||0);
-# ${active}/${m.total_bots||0}
-DASHBOARD_HTML = open("dashboard.html", encoding="utf-8").read() if os.path.exists("dashboard.html") else "<h1>Add dashboard.html</h1>"
+# Control Deck HTML: same folder mein dashboard.html rakho (tumhara purana design)
+# Bots column: active_bots/total_bots
+DASHBOARD_HTML = open("dashboard.html", encoding="utf-8").read() if os.path.exists("dashboard.html") else """<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px"><h1>Zoom Command Center</h1><p>Put your Control Deck HTML in <b>dashboard.html</b> next to main.py</p><p>In bots column use: <code>active_bots / total_bots</code></p></body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
