@@ -8,3 +8,5 @@ pydantic==2.9.0
 python-multipart
 playwright
 httpx
+indian-names
+Faker
