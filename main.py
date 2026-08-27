@@ -1,6 +1,6 @@
 # ============================================
-# ZOOM BOT CENTRAL – FINAL
-# unique names | hard kill | capacity lock | schedule
+# ZOOM BOT CENTRAL – FINAL (Railway)
+# persist state | unique names | hard kill | schedule
 # ============================================
 import os, uuid, asyncio, json, signal, random
 from collections import deque
@@ -13,7 +13,8 @@ from pydantic import BaseModel
 import socketio
 
 IST = timezone(timedelta(hours=5, minutes=30))
-def now_ist(): return datetime.now(IST)
+def now_ist():
+    return datetime.now(IST)
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*", logger=False, engineio_logger=False)
 app = FastAPI(title="Zoom Bot Central")
@@ -24,6 +25,8 @@ workers, running_tasks, meeting_groups, scheduled_tasks = {}, {}, {}, {}
 session_status = {"logged_in": False, "last_checked": None, "message": "No session file", "login_in_progress": False}
 meeting_logs, global_logs = {}, deque(maxlen=400)
 meeting_used_firsts = {}
+STATE_FILE = "bot_state.json"
+BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
 
 INDIAN_FIRST_POOL = [
     "Aarav","Vivaan","Aditya","Vihaan","Arjun","Reyansh","Ayaan","Krishna","Ishaan","Shaurya",
@@ -52,7 +55,7 @@ INDIAN_FIRST_POOL = [
     "Girish","Hitesh","Iqbal","Jaspreet","Luv","Manjot","Navjot","Puneet","Simran","Ujjwal",
     "Harpreet","Gurpreet","Jasleen","Manpreet","Navdeep","Amrit","Aaradhya","Bhavna","Chandni","Deepika",
     "Gayatri","Hema","Indira","Janhvi","Kajal","Lata","Mamta","Namrata","Prerna","Rashmi",
-    "Sonal","Tanisha","Vandana","Yashika","Ayesha","Chitra","Damini","Fatima","Oviya","Waheeda",
+    "Sonal","Tanisha","Vandana","Yashika","Chitra","Damini","Fatima","Oviya",
 ]
 EN_FIRST_POOL = [
     "James","John","Michael","David","Emily","Emma","Olivia","Daniel","Matthew","Sarah",
@@ -78,7 +81,7 @@ EN_FIRST_POOL = [
     "Victor","Virginia","Walter","Wayne","Wendy","Elliot","Silas","Clara","Mila","Lila","Ezra",
 ]
 _INDIAN_PREFIX = ["Aa","Vi","Ad","Ar","Re","Kr","Is","Sh","Ra","Ro","An","Di","Sa","Ka","Ri","Am","Ne","Su","De","Si","Om","Yu","Pr","Dh","La","Ha","Na","Ja","Ma","Pa","Ta","Ga","Ve","Ch","Bh","Tr"]
-_INDIAN_SUFFIX = ["rav","haan","itya","jun","ansh","ish","aurya","hul","han","anya","ya","anvi","vya","it","esh","epak","vik","yan","eet","isha","ika","ita","ani","eep","adev","ika","esh"]
+_INDIAN_SUFFIX = ["rav","haan","itya","jun","ansh","ish","aurya","hul","han","anya","ya","anvi","vya","it","esh","epak","vik","yan","eet","isha","ika","ita","ani","eep","adev"]
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -88,11 +91,47 @@ def add_log(meeting, message, level="info"):
         meeting_logs.setdefault(meeting, deque(maxlen=500)).append(line)
     print(f"[{ts}] [{meeting or '-'}] {message}", flush=True)
 
+def save_state():
+    try:
+        data = {
+            "running_tasks": running_tasks,
+            "meeting_groups": meeting_groups,
+            "scheduled_tasks": scheduled_tasks,
+            "meeting_used_firsts": {k: list(v) for k, v in meeting_used_firsts.items()},
+            "workers_cap": {
+                wid: {
+                    "max_capacity": w.get("max_capacity", 50),
+                    "free_capacity": w.get("free_capacity", 0),
+                }
+                for wid, w in workers.items()
+            },
+        }
+        with open(STATE_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"save_state err: {e}", flush=True)
+
+def load_state():
+    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts
+    if not os.path.exists(STATE_FILE):
+        return
+    try:
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+        running_tasks.update(data.get("running_tasks") or {})
+        meeting_groups.update(data.get("meeting_groups") or {})
+        scheduled_tasks.update(data.get("scheduled_tasks") or {})
+        meeting_used_firsts.update({k: set(v) for k, v in (data.get("meeting_used_firsts") or {}).items()})
+        print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)}", flush=True)
+    except Exception as e:
+        print(f"load_state err: {e}", flush=True)
+
 def _synthetic_indian_first(used: set) -> str:
     for _ in range(300):
         name = random.choice(_INDIAN_PREFIX) + random.choice(_INDIAN_SUFFIX)
         name = name[0].upper() + name[1:].lower()
-        if name.lower() not in used and len(name) >= 4 and not name.lower().startswith("user"):
+        key = name.lower()
+        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user") and len(name) >= 4:
             return name
     return "Aarav" + random.choice(["esh", "ansh", "yan", "ika"])
 
@@ -105,7 +144,7 @@ def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str
         if len(out) >= count:
             break
         key = f.lower()
-        if key not in used and key != "mj" and not key.startswith("user"):
+        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user"):
             used.add(key)
             out.append(f)
     while len(out) < count:
@@ -116,7 +155,7 @@ def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str
         else:
             name = _synthetic_indian_first(used)
         key = name.lower()
-        if key not in used and key != "mj" and not key.startswith("user"):
+        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user"):
             used.add(key)
             out.append(name)
     return out
@@ -156,6 +195,7 @@ async def disconnect(sid):
             workers[wid]["last_seen"] = now_ist().isoformat()
             orphan = [t for t, x in running_tasks.items() if x.get("worker_id") == wid]
             add_log("-", f"Worker {wid} disconnected | {len(orphan)} task(s) reserved — Kill to free", "err")
+            save_state()
             break
 
 @sio.event
@@ -163,13 +203,30 @@ async def register_worker(sid, data):
     wid = data.get("worker_id", f"worker-{sid[:6]}")
     max_cap = int(data.get("max_capacity", 10))
     now = now_ist().isoformat()
+    saved_cap = {}
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE) as f:
+                saved_cap = (json.load(f).get("workers_cap") or {}).get(wid) or {}
+        except Exception:
+            saved_cap = {}
+    reserved = sum(t.get("bot_count", 0) for t in running_tasks.values() if t.get("worker_id") == wid)
     if wid in workers:
         workers[wid].update({"sid": sid, "max_capacity": max_cap, "last_seen": now})
-        if "free_capacity" not in workers[wid]:
-            workers[wid]["free_capacity"] = max_cap
+        if reserved:
+            workers[wid]["free_capacity"] = max(0, max_cap - reserved)
     else:
-        workers[wid] = {"sid": sid, "max_capacity": max_cap, "free_capacity": max_cap, "last_seen": now}
-    add_log("-", f"Worker {wid} registered | capacity={max_cap}", "ok")
+        free = saved_cap.get("free_capacity")
+        if free is None:
+            free = max(0, max_cap - reserved)
+        workers[wid] = {
+            "sid": sid,
+            "max_capacity": max_cap,
+            "free_capacity": max(0, min(max_cap, int(free))),
+            "last_seen": now,
+        }
+    add_log("-", f"Worker {wid} registered | max={max_cap} free={workers[wid]['free_capacity']} reserved={reserved}", "ok")
+    save_state()
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
 
 @sio.event
@@ -192,6 +249,7 @@ async def task_completed(sid, data):
             meeting_used_firsts.pop(m, None)
     del running_tasks[tid]
     add_log(m or "-", f"Task {tid} completed | +{bc} capacity")
+    save_state()
 
 @sio.event
 async def bot_log(sid, data):
@@ -284,7 +342,7 @@ async def start_bots(req: StartBotRequest):
                 break
             token = (raw.strip().split() or ["Aarav"])[0]
             key = token.lower()
-            if key in used_local or key == "mj" or key.startswith("user"):
+            if key in used_local or key in BANNED_FIRSTS or "katappa" in key or key.startswith("user"):
                 continue
             used_local.add(key)
             firsts.append(raw.strip())
@@ -336,6 +394,7 @@ async def start_bots(req: StartBotRequest):
         raise HTTPException(503, "No free workers")
     started = req.bot_count - remaining
     add_log(meeting, f"🚀 Started {started} bots | unique names | mode={req.join_mode}", "ok")
+    save_state()
     return {"success": True, "message": f"Started {started} bots for {meeting}", "assigned": assigned, "remaining_unassigned": remaining}
 
 @app.post("/api/schedule")
@@ -356,12 +415,14 @@ async def create_schedule(req: ScheduleRequest):
         "schedule_at": st.isoformat(), "created_at": now_ist().isoformat(),
     }
     add_log(req.meeting_code, f"📅 Scheduled {req.bot_count} bots", "info")
+    save_state()
     return {"success": True, "schedule_id": sid, "message": "Scheduled successfully"}
 
 @app.delete("/api/schedule/{schedule_id}")
 async def delete_schedule(schedule_id: str):
     if schedule_id in scheduled_tasks:
         del scheduled_tasks[schedule_id]
+        save_state()
         return {"success": True}
     raise HTTPException(404)
 
@@ -385,6 +446,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         meeting_groups.pop(meeting, None)
         meeting_used_firsts.pop(meeting, None)
         add_log(meeting, "🛑 HARD KILL all workers", "err")
+        save_state()
         return {"success": True, "message": f"Meeting {meeting} terminated"}
     for wid, info in list(workers.items()):
         if info.get("sid"):
@@ -402,11 +464,13 @@ async def terminate(req: Optional[TerminateRequest] = None):
     meeting_groups.clear()
     meeting_used_firsts.clear()
     add_log("-", "🛑 ALL hard-killed", "err")
+    save_state()
     return {"success": True, "message": "All terminated"}
 
 @app.post("/api/shutdown")
 async def shutdown_server():
     add_log("-", "🛑 SHUTDOWN", "err")
+    save_state()
     for wid, info in workers.items():
         if info.get("sid"):
             await sio.emit("shutdown", {}, to=info["sid"])
@@ -439,20 +503,28 @@ async def schedule_checker():
                 ))
             except Exception as e:
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
+            save_state()
 
 @app.on_event("startup")
 async def startup_event():
+    load_state()
     asyncio.create_task(schedule_checker())
     if os.path.exists("zoom_session.json"):
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
-    add_log("-", "✅ Server started", "ok")
+    add_log("-", "✅ Server started (state restored)", "ok")
 
-# Control Deck HTML: same folder mein dashboard.html rakho (tumhara purana design)
-# Bots column: active_bots/total_bots
-DASHBOARD_HTML = open("dashboard.html", encoding="utf-8").read() if os.path.exists("dashboard.html") else """<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px"><h1>Zoom Command Center</h1><p>Put your Control Deck HTML in <b>dashboard.html</b> next to main.py</p><p>In bots column use: <code>active_bots / total_bots</code></p></body></html>"""
+DASHBOARD_HTML = open("dashboard.html", encoding="utf-8").read() if os.path.exists("dashboard.html") else """<!DOCTYPE html>
+<html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px">
+<h1>Zoom Command Center</h1>
+<p>Put Control Deck HTML in <b>dashboard.html</b> next to main.py</p>
+<p>Bots column: <code>active_bots / total_bots</code></p>
+</body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
+    if os.path.exists("dashboard.html"):
+        with open("dashboard.html", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
     return HTMLResponse(DASHBOARD_HTML)
 
 if __name__ == "__main__":
