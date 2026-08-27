@@ -1,6 +1,6 @@
 # ============================================
-# ZOOM BOT CENTRAL – FINAL (Railway)
-# persist state | unique names | hard kill | schedule
+# ZOOM BOT CENTRAL – Railway FULL
+# persist | indian_names + Faker | hard kill | schedule
 # ============================================
 import os, uuid, asyncio, json, signal, random
 from collections import deque
@@ -11,6 +11,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import socketio
+
+try:
+    import indian_names
+except Exception:
+    indian_names = None
+try:
+    from faker import Faker
+    _faker = Faker()
+except Exception:
+    _faker = None
 
 IST = timezone(timedelta(hours=5, minutes=30))
 def now_ist():
@@ -27,61 +37,6 @@ meeting_logs, global_logs = {}, deque(maxlen=400)
 meeting_used_firsts = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
-
-INDIAN_FIRST_POOL = [
-    "Aarav","Vivaan","Aditya","Vihaan","Arjun","Reyansh","Ayaan","Krishna","Ishaan","Shaurya",
-    "Rahul","Rohan","Priya","Ananya","Diya","Saanvi","Aadhya","Kavya","Riya","Anika",
-    "Amit","Rajesh","Sneha","Pooja","Neha","Vikram","Karan","Manish","Suresh","Deepak",
-    "Ankit","Siddharth","Kunal","Nikhil","Harsh","Yash","Aryan","Kabir","Dev","Rudra",
-    "Atharv","Darsh","Ira","Myra","Anvi","Kiara","Pari","Navya","Shanaya","Veer",
-    "Om","Yuvraj","Pranav","Dhruv","Kartik","Laksh","Rian","Samar","Advait","Arnav",
-    "Raghav","Tanvi","Isha","Meera","Sara","Aisha","Zara","Inaaya","Anaya","Kyra",
-    "Rishi","Varun","Nitin","Pankaj","Gaurav","Sachin","Rohit","Vivek","Ashish","Mohit",
-    "Sunita","Kavita","Jyoti","Rekha","Geeta","Seema","Nisha","Ritu","Swati","Preeti",
-    "Farhan","Imran","Zoya","Rehan","Samir","Aamir","Naina","Alisha","Nirvaan","Aarush",
-    "Viaan","Shivansh","Parth","Yug","Agastya","Viraj","Shaunak","Kiaan","Ahaan","Neel",
-    "Avi","Daksh","Shiven","Aariv","Kian","Arhaan","Zayan","Ivaan","Ansh","Riyan",
-    "Jai","Veeraj","Saanvika","Aarohi","Amaira","Siya","Avni","Meher","Noor","Sana",
-    "Alia","Kriti","Shreya","Aditi","Ishita","Tanya","Ritika","Pallavi","Shruti","Nikita",
-    "Komal","Payal","Ruchi","Manav","Aman","Sahil","Akash","Naveen","Sanjay","Ramesh",
-    "Mahesh","Dinesh","Rakesh","Naresh","Mukesh","Paresh","Abhinav","Abhishek","Aakash","Anuj",
-    "Ashutosh","Bhavesh","Chirag","Darshan","Eshan","Faisal","Gagan","Hemant","Inder","Jatin",
-    "Kaushal","Lalit","Mayank","Naman","Onkar","Pratik","Rajat","Sagar","Tarun","Uday",
-    "Vinay","Wasim","Yatin","Zeeshan","Arpit","Bhavya","Charu","Divya","Ekta","Garima",
-    "Heena","Ipsita","Jaya","Kirti","Lavanya","Madhavi","Nandini","Pragya","Radhika","Sakshi",
-    "Trisha","Urvashi","Vaishnavi","Yamini","Ayesha","Bhavika","Chhavi","Drishti","Eshita","Fiza",
-    "Gunjan","Hrithik","Ishan","Jitesh","Kshitij","Lokesh","Mihir","Niraj","Omkar","Pranay",
-    "Rishabh","Tushar","Utkarsh","Vishal","Anshul","Brijesh","Chetan","Devansh","Eshaan","Faraz",
-    "Girish","Hitesh","Iqbal","Jaspreet","Luv","Manjot","Navjot","Puneet","Simran","Ujjwal",
-    "Harpreet","Gurpreet","Jasleen","Manpreet","Navdeep","Amrit","Aaradhya","Bhavna","Chandni","Deepika",
-    "Gayatri","Hema","Indira","Janhvi","Kajal","Lata","Mamta","Namrata","Prerna","Rashmi",
-    "Sonal","Tanisha","Vandana","Yashika","Chitra","Damini","Fatima","Oviya",
-]
-EN_FIRST_POOL = [
-    "James","John","Michael","David","Emily","Emma","Olivia","Daniel","Matthew","Sarah",
-    "Robert","William","Joseph","Thomas","Charles","Christopher","Andrew","Joshua","Ryan","Justin",
-    "Ethan","Noah","Liam","Mason","Logan","Lucas","Jackson","Aiden","Sebastian","Jack",
-    "Sophia","Isabella","Mia","Charlotte","Amelia","Harper","Evelyn","Abigail","Ella","Scarlett",
-    "Henry","Alexander","Samuel","Benjamin","Gabriel","Carter","Wyatt","Julian","Grayson","Leo",
-    "Grace","Chloe","Victoria","Riley","Aria","Lily","Zoey","Nora","Hazel","Aurora",
-    "Owen","Caleb","Isaac","Luke","Nathan","Aaron","Adam","Adrian","Alan","Albert",
-    "Alice","Amy","Andrea","Angela","Anna","Anne","Ashley","Barbara","Betty","Brenda",
-    "Brian","Bruce","Bryan","Carl","Carol","Catherine","Christine","Cynthia","Deborah","Denise",
-    "Dennis","Diana","Diane","Donald","Donna","Doris","Dorothy","Douglas","Edward","Elizabeth",
-    "Eric","Frances","Frank","Fred","Gary","George","Gerald","Gloria","Gregory","Harold",
-    "Helen","Irene","Janet","Janice","Jean","Jeffrey","Jennifer","Jeremy","Jerry","Jesse",
-    "Joan","Joe","Johnny","Jonathan","Jordan","Jose","Joyce","Juan","Judith","Judy",
-    "Julia","Julie","Karen","Kathleen","Kathryn","Keith","Kelly","Kenneth","Kevin","Kimberly",
-    "Larry","Laura","Lawrence","Linda","Lisa","Lois","Louis","Louise","Margaret","Maria",
-    "Marie","Marilyn","Mark","Martha","Martin","Mary","Melissa","Michelle","Mildred","Nancy",
-    "Natalie","Nicholas","Nicole","Norman","Pamela","Patricia","Patrick","Paul","Paula","Peter",
-    "Philip","Rachel","Ralph","Raymond","Rebecca","Richard","Roger","Ronald","Rose","Roy",
-    "Russell","Ruth","Samantha","Sandra","Sara","Scott","Sean","Sharon","Shirley","Stephanie",
-    "Stephen","Steven","Susan","Teresa","Terry","Theresa","Timothy","Tina","Todd","Troy",
-    "Victor","Virginia","Walter","Wayne","Wendy","Elliot","Silas","Clara","Mila","Lila","Ezra",
-]
-_INDIAN_PREFIX = ["Aa","Vi","Ad","Ar","Re","Kr","Is","Sh","Ra","Ro","An","Di","Sa","Ka","Ri","Am","Ne","Su","De","Si","Om","Yu","Pr","Dh","La","Ha","Na","Ja","Ma","Pa","Ta","Ga","Ve","Ch","Bh","Tr"]
-_INDIAN_SUFFIX = ["rav","haan","itya","jun","ansh","ish","aurya","hul","han","anya","ya","anvi","vya","it","esh","epak","vik","yan","eet","isha","ika","ita","ani","eep","adev"]
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -126,38 +81,38 @@ def load_state():
     except Exception as e:
         print(f"load_state err: {e}", flush=True)
 
-def _synthetic_indian_first(used: set) -> str:
-    for _ in range(300):
-        name = random.choice(_INDIAN_PREFIX) + random.choice(_INDIAN_SUFFIX)
-        name = name[0].upper() + name[1:].lower()
-        key = name.lower()
-        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user") and len(name) >= 4:
-            return name
-    return "Aarav" + random.choice(["esh", "ansh", "yan", "ika"])
+def _ok_first(name, used):
+    if not name:
+        return False
+    k = str(name).strip().lower()
+    if k in used or k in BANNED_FIRSTS:
+        return False
+    if "katappa" in k or k.startswith("user"):
+        return False
+    return True
 
 def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str]:
     used = meeting_used_firsts.setdefault(meeting, set())
-    pool = list(EN_FIRST_POOL if name_type == "english" else INDIAN_FIRST_POOL)
-    random.shuffle(pool)
     out = []
-    for f in pool:
-        if len(out) >= count:
-            break
-        key = f.lower()
-        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user"):
-            used.add(key)
-            out.append(f)
-    while len(out) < count:
-        if name_type == "english":
-            name = random.choice(["Elliot", "Owen", "Silas", "Clara", "Mila", "Nora", "Lila", "Ezra", "Miles", "Chloe"])
-            if name.lower() in used:
-                name = random.choice(["Alex", "Sam", "Jordan", "Casey", "Riley", "Quinn"]) + random.choice(["a", "e", "y", ""])
+    tries = 0
+    while len(out) < count and tries < count * 50:
+        tries += 1
+        if name_type == "english" and _faker:
+            first = _faker.first_name()
+        elif indian_names:
+            gender = random.choice(["male", "female", None])
+            first = indian_names.get_first_name(gender=gender) if gender else indian_names.get_first_name()
         else:
-            name = _synthetic_indian_first(used)
-        key = name.lower()
-        if key not in used and key not in BANNED_FIRSTS and "katappa" not in key and not key.startswith("user"):
-            used.add(key)
-            out.append(name)
+            first = random.choice(["Aarav", "Priya", "Rohan", "Ananya", "Diya", "Arjun", "Kavya", "Ishaan", "Navya", "Kabir"])
+        first = str(first).strip().split()[0]
+        if _ok_first(first, used):
+            used.add(first.lower())
+            out.append(first)
+    while len(out) < count:
+        extra = ("Aarav" if name_type != "english" else "Alex") + random.choice(["esh", "ansh", "yan", "ika", "vi", "en"])
+        if _ok_first(extra, used):
+            used.add(extra.lower())
+            out.append(extra)
     return out
 
 class StartBotRequest(BaseModel):
@@ -194,7 +149,7 @@ async def disconnect(sid):
             workers[wid]["sid"] = None
             workers[wid]["last_seen"] = now_ist().isoformat()
             orphan = [t for t, x in running_tasks.items() if x.get("worker_id") == wid]
-            add_log("-", f"Worker {wid} disconnected | {len(orphan)} task(s) reserved — Kill to free", "err")
+            add_log("-", f"Worker {wid} disconnected | {len(orphan)} reserved — Kill to free", "err")
             save_state()
             break
 
@@ -340,12 +295,12 @@ async def start_bots(req: StartBotRequest):
         for raw in req.custom_names:
             if len(firsts) >= req.bot_count:
                 break
-            token = (raw.strip().split() or ["Aarav"])[0]
+            token = (str(raw).strip().split() or ["Aarav"])[0]
             key = token.lower()
             if key in used_local or key in BANNED_FIRSTS or "katappa" in key or key.startswith("user"):
                 continue
             used_local.add(key)
-            firsts.append(raw.strip())
+            firsts.append(str(raw).strip())
         if len(firsts) < req.bot_count:
             firsts.extend(allocate_unique_firsts(meeting, req.bot_count - len(firsts), "indian"))
         all_firsts = firsts[:req.bot_count]
@@ -366,9 +321,14 @@ async def start_bots(req: StartBotRequest):
         offset += give
         custom_slice = slice_firsts if name_type == "custom" else None
         payload = {
-            "task_id": task_id, "meeting_code": meeting, "passcode": passcode, "bot_count": give,
-            "duration_minutes": req.duration_minutes, "name_type": name_type,
-            "custom_names": custom_slice, "assigned_first_names": slice_firsts,
+            "task_id": task_id,
+            "meeting_code": meeting,
+            "passcode": passcode,
+            "bot_count": give,
+            "duration_minutes": req.duration_minutes,
+            "name_type": name_type,
+            "custom_names": custom_slice,
+            "assigned_first_names": slice_firsts,
             "join_mode": req.join_mode or "individual",
         }
         await sio.emit("new_task", payload, to=info["sid"])
@@ -393,7 +353,7 @@ async def start_bots(req: StartBotRequest):
     if not assigned:
         raise HTTPException(503, "No free workers")
     started = req.bot_count - remaining
-    add_log(meeting, f"🚀 Started {started} bots | unique names | mode={req.join_mode}", "ok")
+    add_log(meeting, f"🚀 Started {started} bots | {name_type} | mode={req.join_mode}", "ok")
     save_state()
     return {"success": True, "message": f"Started {started} bots for {meeting}", "assigned": assigned, "remaining_unassigned": remaining}
 
@@ -408,11 +368,16 @@ async def create_schedule(req: ScheduleRequest):
         raise HTTPException(400, "Must be future")
     sid = str(uuid.uuid4())[:8]
     scheduled_tasks[sid] = {
-        "schedule_id": sid, "meeting_code": req.meeting_code.strip().replace(" ", ""),
-        "passcode": "" if req.passcode is None else str(req.passcode), "bot_count": req.bot_count,
-        "duration_minutes": req.duration_minutes, "name_type": req.name_type or "indian",
-        "custom_names": req.custom_names, "join_mode": req.join_mode or "individual",
-        "schedule_at": st.isoformat(), "created_at": now_ist().isoformat(),
+        "schedule_id": sid,
+        "meeting_code": req.meeting_code.strip().replace(" ", ""),
+        "passcode": "" if req.passcode is None else str(req.passcode),
+        "bot_count": req.bot_count,
+        "duration_minutes": req.duration_minutes,
+        "name_type": req.name_type or "indian",
+        "custom_names": req.custom_names,
+        "join_mode": req.join_mode or "individual",
+        "schedule_at": st.isoformat(),
+        "created_at": now_ist().isoformat(),
     }
     add_log(req.meeting_code, f"📅 Scheduled {req.bot_count} bots", "info")
     save_state()
@@ -448,6 +413,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
         add_log(meeting, "🛑 HARD KILL all workers", "err")
         save_state()
         return {"success": True, "message": f"Meeting {meeting} terminated"}
+
     for wid, info in list(workers.items()):
         if info.get("sid"):
             await sio.emit("terminate_all", {}, to=info["sid"])
@@ -513,19 +479,16 @@ async def startup_event():
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Server started (state restored)", "ok")
 
-DASHBOARD_HTML = open("dashboard.html", encoding="utf-8").read() if os.path.exists("dashboard.html") else """<!DOCTYPE html>
-<html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px">
-<h1>Zoom Command Center</h1>
-<p>Put Control Deck HTML in <b>dashboard.html</b> next to main.py</p>
-<p>Bots column: <code>active_bots / total_bots</code></p>
-</body></html>"""
-
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     if os.path.exists("dashboard.html"):
         with open("dashboard.html", encoding="utf-8") as f:
             return HTMLResponse(f.read())
-    return HTMLResponse(DASHBOARD_HTML)
+    return HTMLResponse("""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px">
+<h1>Zoom Command Center</h1>
+<p>Put Control Deck HTML in <b>dashboard.html</b></p>
+<p>Bots column use: <code>active_bots / total_bots</code></p>
+</body></html>""")
 
 if __name__ == "__main__":
     import uvicorn
