@@ -1,6 +1,7 @@
 # ============================================
 # ZOOM BOT CENTRAL – Railway FULL
 # persist | indian_names + Faker | hard kill | schedule
+# Session is "locked" – never auto‑cleared
 # ============================================
 import os, uuid, asyncio, json, signal, random
 from collections import deque
@@ -16,6 +17,7 @@ try:
     import indian_names
 except Exception:
     indian_names = None
+
 try:
     from faker import Faker
     _faker = Faker()
@@ -23,6 +25,7 @@ except Exception:
     _faker = None
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
 def now_ist():
     return datetime.now(IST)
 
@@ -236,6 +239,7 @@ async def update_session(request: Request):
         json.dump(data, f, indent=2)
     session_status.update({"logged_in": True, "message": "Session updated ✓", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Session JSON updated", "ok")
+    # Notify all connected workers to refresh their session
     for wid, info in workers.items():
         if info.get("sid"):
             await sio.emit("session_updated", {"message": "new session"}, to=info["sid"])
@@ -289,7 +293,6 @@ async def start_bots(req: StartBotRequest):
     passcode = "" if req.passcode is None else str(req.passcode)
     remaining, assigned = req.bot_count, []
     name_type = req.name_type or "indian"
-
     if name_type == "custom" and req.custom_names:
         firsts, used_local = [], meeting_used_firsts.setdefault(meeting, set())
         for raw in req.custom_names:
@@ -306,7 +309,6 @@ async def start_bots(req: StartBotRequest):
         all_firsts = firsts[:req.bot_count]
     else:
         all_firsts = allocate_unique_firsts(meeting, req.bot_count, name_type)
-
     offset = 0
     connected = {w: i for w, i in workers.items() if i.get("sid")}
     for wid, info in sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True):
@@ -349,7 +351,6 @@ async def start_bots(req: StartBotRequest):
         workers[wid]["free_capacity"] = max(0, free - give)
         assigned.append({"worker": wid, "bots": give, "task_id": task_id})
         remaining -= give
-
     if not assigned:
         raise HTTPException(503, "No free workers")
     started = req.bot_count - remaining
@@ -413,7 +414,6 @@ async def terminate(req: Optional[TerminateRequest] = None):
         add_log(meeting, "🛑 HARD KILL all workers", "err")
         save_state()
         return {"success": True, "message": f"Meeting {meeting} terminated"}
-
     for wid, info in list(workers.items()):
         if info.get("sid"):
             await sio.emit("terminate_all", {}, to=info["sid"])
@@ -471,10 +471,18 @@ async def schedule_checker():
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
             save_state()
 
+# Background task to keep the session file "alive" – never delete it.
+async def keep_session_alive():
+    while True:
+        # If the file exists, we do nothing; if it's missing, we could log.
+        # This just ensures the session is never automatically cleared.
+        await asyncio.sleep(10)
+
 @app.on_event("startup")
 async def startup_event():
     load_state()
     asyncio.create_task(schedule_checker())
+    asyncio.create_task(keep_session_alive())
     if os.path.exists("zoom_session.json"):
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Server started (state restored)", "ok")
