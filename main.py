@@ -681,13 +681,14 @@ async def get_wallet_balance():
             "source": source,
             "token_ok": True,
         }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 class HFCreditsOverride(BaseModel):
     credits: float
 
 @app.post("/api/wallet/override")
 async def wallet_override(body: HFCreditsOverride):
-    global hf_aliases
     data = {}
     if os.path.exists(STATE_FILE):
         try:
@@ -698,8 +699,6 @@ async def wallet_override(body: HFCreditsOverride):
     with open(STATE_FILE, "w") as f:
         json.dump(data, f)
     return {"success": True, "credits": float(body.credits)}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 def _space_row(space, api):
     sid = getattr(space, "id", None) or str(space)
