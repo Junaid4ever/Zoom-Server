@@ -1,17 +1,23 @@
 # ============================================
 # ZOOM BOT CENTRAL – Railway FULL
-# persist | indian_names + Faker | hard kill | schedule
-# Session is "locked" – never auto‑cleared
+# + HF Wallet + Space Control
 # ============================================
-import os, uuid, asyncio, json, signal, random
+import os, uuid, asyncio, json, signal, random, httpx
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
 import socketio
+
+# Hugging Face Hub
+try:
+    from huggingface_hub import HfApi, list_spaces
+except ImportError:
+    HfApi = None
+    list_spaces = None
 
 try:
     import indian_names
@@ -40,6 +46,7 @@ meeting_logs, global_logs = {}, deque(maxlen=400)
 meeting_used_firsts = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
+pause_state = False   # Global pause flag
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -63,6 +70,7 @@ def save_state():
                 }
                 for wid, w in workers.items()
             },
+            "pause_state": pause_state,
         }
         with open(STATE_FILE, "w") as f:
             json.dump(data, f)
@@ -70,7 +78,7 @@ def save_state():
         print(f"save_state err: {e}", flush=True)
 
 def load_state():
-    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts
+    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts, pause_state
     if not os.path.exists(STATE_FILE):
         return
     try:
@@ -80,10 +88,12 @@ def load_state():
         meeting_groups.update(data.get("meeting_groups") or {})
         scheduled_tasks.update(data.get("scheduled_tasks") or {})
         meeting_used_firsts.update({k: set(v) for k, v in (data.get("meeting_used_firsts") or {}).items()})
-        print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)}", flush=True)
+        pause_state = data.get("pause_state", False)
+        print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)} pause={pause_state}", flush=True)
     except Exception as e:
         print(f"load_state err: {e}", flush=True)
 
+# ---------- Existing helper functions (ok_first, allocate_unique_firsts) ----------
 def _ok_first(name, used):
     if not name:
         return False
@@ -118,6 +128,7 @@ def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str
             out.append(extra)
     return out
 
+# ---------- Pydantic Models ----------
 class StartBotRequest(BaseModel):
     meeting_code: str
     passcode: str = ""
@@ -141,6 +152,7 @@ class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
+# ---------- SocketIO Events ----------
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}", flush=True)
@@ -213,6 +225,7 @@ async def task_completed(sid, data):
 async def bot_log(sid, data):
     add_log(data.get("meeting_code", ""), data.get("message", ""), data.get("level", "info"))
 
+# ---------- HTTP Endpoints ----------
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -239,7 +252,6 @@ async def update_session(request: Request):
         json.dump(data, f, indent=2)
     session_status.update({"logged_in": True, "message": "Session updated ✓", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Session JSON updated", "ok")
-    # Notify all connected workers to refresh their session
     for wid, info in workers.items():
         if info.get("sid"):
             await sio.emit("session_updated", {"message": "new session"}, to=info["sid"])
@@ -279,10 +291,13 @@ async def status():
         "session": session_status,
         "connected_workers_count": len(connected),
         "recent_logs": list(global_logs)[-40:],
+        "pause_state": pause_state,
     }
 
 @app.post("/api/start-bots")
 async def start_bots(req: StartBotRequest):
+    if pause_state:
+        raise HTTPException(503, "System is globally paused. Resume first.")
     if not os.path.exists("zoom_session.json"):
         raise HTTPException(400, "No session file")
     if req.bot_count < 1:
@@ -444,6 +459,152 @@ async def shutdown_server():
     os.kill(os.getpid(), signal.SIGTERM)
     return {"success": True}
 
+# ---------- Global Pause / Resume ----------
+@app.post("/api/pause")
+async def pause_all():
+    global pause_state
+    pause_state = True
+    add_log("-", "⏸️ GLOBAL PAUSE activated", "warn")
+    for wid, info in workers.items():
+        if info.get("sid"):
+            await sio.emit("global_pause", {})
+    save_state()
+    return {"success": True, "paused": True}
+
+@app.post("/api/resume")
+async def resume_all():
+    global pause_state
+    pause_state = False
+    add_log("-", "▶️ GLOBAL RESUME activated", "ok")
+    for wid, info in workers.items():
+        if info.get("sid"):
+            await sio.emit("global_resume", {})
+    save_state()
+    return {"success": True, "paused": False}
+
+@app.get("/api/pause-status")
+async def pause_status():
+    return {"paused": pause_state}
+
+# ---------- Hugging Face Wallet & Space Control ----------
+@app.get("/api/wallet")
+async def get_wallet_balance():
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        return JSONResponse(status_code=400, content={"error": "HF_TOKEN not set"})
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            headers = {"Authorization": f"Bearer {token}"}
+            resp = await client.get("https://huggingface.co/api/wallet", headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "success": True,
+                    "balance": data.get("balance", 0),
+                    "compute_total": data.get("totalComputeCredits", 0),
+                    "compute_used": data.get("usedComputeCredits", 0),
+                    "compute_remaining": data.get("remainingComputeCredits", 0),
+                    "currency": "USD"
+                }
+            else:
+                return JSONResponse(status_code=resp.status_code, content={"error": f"HF API: {resp.status_code}", "details": resp.text})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/api/hf/spaces")
+async def get_my_spaces():
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise HTTPException(400, "HF_TOKEN not set")
+    if not HfApi:
+        raise HTTPException(500, "huggingface_hub not installed")
+    try:
+        api = HfApi(token=token)
+        # list all spaces of the authenticated user
+        spaces = list_spaces(author=api.whoami()["name"])  # or use api.list_spaces
+        result = []
+        for space in spaces:
+            # space has attributes: id, status, runtime, etc.
+            # using space.__dict__ to get all
+            result.append({
+                "id": space.id,
+                "name": space.id.split("/")[-1],
+                "status": getattr(space, "status", "unknown"),
+                "runtime": getattr(space, "runtime", {}),
+                "sdk": getattr(space, "sdk", "unknown"),
+                "likes": getattr(space, "likes", 0),
+            })
+        return {"success": True, "spaces": result}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/hf/pause/{space_id}")
+async def pause_space(space_id: str):
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise HTTPException(400, "HF_TOKEN not set")
+    try:
+        api = HfApi(token=token)
+        api.pause_space(space_id)
+        add_log("-", f"⏸️ Paused HF Space: {space_id}", "ok")
+        return {"success": True, "message": f"Paused {space_id}"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/hf/resume/{space_id}")
+async def resume_space(space_id: str):
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise HTTPException(400, "HF_TOKEN not set")
+    try:
+        api = HfApi(token=token)
+        api.restart_space(space_id)   # Restart = Resume
+        add_log("-", f"▶️ Resumed HF Space: {space_id}", "ok")
+        return {"success": True, "message": f"Resumed {space_id}"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/hf/pause-all")
+async def pause_all_spaces():
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise HTTPException(400, "HF_TOKEN not set")
+    try:
+        api = HfApi(token=token)
+        user = api.whoami()["name"]
+        spaces = list_spaces(author=user)
+        count = 0
+        for space in spaces:
+            if getattr(space, "status", "") != "paused":
+                api.pause_space(space.id)
+                count += 1
+                await asyncio.sleep(0.3)
+        add_log("-", f"⏸️ Paused {count} HF Spaces", "ok")
+        return {"success": True, "paused_count": count}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/hf/resume-all")
+async def resume_all_spaces():
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise HTTPException(400, "HF_TOKEN not set")
+    try:
+        api = HfApi(token=token)
+        user = api.whoami()["name"]
+        spaces = list_spaces(author=user)
+        count = 0
+        for space in spaces:
+            if getattr(space, "status", "") == "paused":
+                api.restart_space(space.id)
+                count += 1
+                await asyncio.sleep(0.3)
+        add_log("-", f"▶️ Resumed {count} HF Spaces", "ok")
+        return {"success": True, "resumed_count": count}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ---------- Background tasks ----------
 async def schedule_checker():
     while True:
         await asyncio.sleep(4)
@@ -471,11 +632,8 @@ async def schedule_checker():
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
             save_state()
 
-# Background task to keep the session file "alive" – never delete it.
 async def keep_session_alive():
     while True:
-        # If the file exists, we do nothing; if it's missing, we could log.
-        # This just ensures the session is never automatically cleared.
         await asyncio.sleep(10)
 
 @app.on_event("startup")
@@ -495,7 +653,6 @@ async def dashboard():
     return HTMLResponse("""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0b1220;color:#eef5ff;padding:24px">
 <h1>Zoom Command Center</h1>
 <p>Put Control Deck HTML in <b>dashboard.html</b></p>
-<p>Bots column use: <code>active_bots / total_bots</code></p>
 </body></html>""")
 
 if __name__ == "__main__":
