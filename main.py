@@ -495,10 +495,13 @@ async def get_wallet_balance():
         from huggingface_hub import HfApi
         api = HfApi(token=token)
         user_info = api.whoami()
+        credits = user_info.get("credits", 0)
+        if credits is None:
+            credits = 0
         return {
             "success": True,
             "username": user_info.get("name"),
-            "credits": user_info.get("credits", 0),
+            "credits": int(credits),
             "currency": "USD"
         }
     except Exception as e:
@@ -517,10 +520,16 @@ async def get_my_spaces():
         spaces = list_spaces(author=user)
         result = []
         for space in spaces:
+            # Fetch runtime status
+            try:
+                runtime = api.get_space_runtime(space.id)
+                status = runtime.get("status", "unknown")
+            except Exception:
+                status = "unknown"
             result.append({
                 "id": space.id,
                 "name": space.id.split("/")[-1],
-                "status": getattr(space, "status", "unknown"),
+                "status": status,
                 "runtime": getattr(space, "runtime", {}),
                 "sdk": getattr(space, "sdk", "unknown"),
                 "likes": getattr(space, "likes", 0),
@@ -566,7 +575,13 @@ async def pause_all_spaces():
         spaces = list_spaces(author=user)
         count = 0
         for space in spaces:
-            if getattr(space, "status", "") != "paused":
+            # Check current status
+            try:
+                runtime = api.get_space_runtime(space.id)
+                status = runtime.get("status", "unknown")
+            except Exception:
+                status = "unknown"
+            if status != "paused":
                 api.pause_space(space.id)
                 count += 1
                 await asyncio.sleep(0.3)
@@ -586,7 +601,12 @@ async def resume_all_spaces():
         spaces = list_spaces(author=user)
         count = 0
         for space in spaces:
-            if getattr(space, "status", "") == "paused":
+            try:
+                runtime = api.get_space_runtime(space.id)
+                status = runtime.get("status", "unknown")
+            except Exception:
+                status = "unknown"
+            if status == "paused":
                 api.restart_space(space.id)
                 count += 1
                 await asyncio.sleep(0.3)
