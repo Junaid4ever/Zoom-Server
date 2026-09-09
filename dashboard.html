@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Zoom Command Center • Control Deck</title>
 <style>
-/* same as before – no changes needed */
 :root{
   --bg:#070b14; --bg2:#0b1220; --surface:rgba(15,23,42,.78);
   --surface2:rgba(17,28,49,.9); --input:#0b1424; --border:rgba(148,163,184,.16);
@@ -124,12 +123,20 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
 .theme-pop{position:relative}.theme-menu{display:none;position:absolute;right:0;top:42px;padding:9px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);min-width:150px;z-index:100}
 .theme-menu.show{display:block}.theme-menu button{display:block;width:100%;text-align:left;padding:9px;border:0;background:transparent;color:var(--text);border-radius:8px;cursor:pointer}.theme-menu button:hover{background:var(--input)}
 #customBox{background:var(--input)!important;border-color:var(--border)!important}#customNames{background:var(--surface2)!important;border-color:var(--border)!important;color:var(--text)!important}
-.hf-space-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:4px;background:var(--input);border-radius:8px;border:1px solid var(--border);font-size:13px}
-.hf-space-status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.hf-space-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:4px;background:var(--input);border-radius:8px;border:1px solid var(--border);font-size:13px;gap:10px}
+.hf-space-status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;margin-left:6px}
 .hf-status-running{background:rgba(5,150,105,.2);color:var(--success)}
 .hf-status-paused{background:rgba(100,116,139,.2);color:var(--muted)}
 .hf-status-stopped{background:rgba(220,53,69,.2);color:var(--danger)}
-.hf-controls{display:flex;gap:6px}
+.hf-status-unknown{background:rgba(148,163,184,.15);color:var(--muted)}
+.hf-controls{display:flex;gap:8px;align-items:center}
+.switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:#334155;border-radius:999px;transition:.2s}
+.slider:before{content:"";position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--success)}
+.switch input:checked + .slider:before{transform:translateX(20px)}
+.switch input:disabled + .slider{opacity:.45;cursor:wait}
 @media(min-width:1000px){.mobile-only{display:none}.desktop-only{display:block}}
 @media(max-width:999px){.grid{grid-template-columns:1fr}.header{position:relative;top:0}}
 @media(max-width:767px){body{padding:10px}.card{padding:14px;border-radius:17px}.form-row,.schedule-fields.show{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.stat{padding:11px}.stat-v{font-size:18px}.header h1{font-size:16px}.header-right{width:100%}.header-right .usage,.header-right .clock{display:none}.btn{padding:12px 13px}}
@@ -161,7 +168,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
       <button class="btn btn-danger btn-sm" onclick="openShutdownModal()">🛑 Shutdown</button>
     </div>
   </div>
-
   <div class="card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
@@ -177,17 +183,13 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
       </div>
     </div>
   </div>
-
-  <!-- Stats -->
   <div class="stats">
     <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">currently allocated</div></div>
     <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live sessions</div></div>
     <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">command center</div></div>
-    <div class="stat"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span> credits left</div></div>
+    <div class="stat"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span></div></div>
   </div>
-
   <div class="grid">
-    <!-- Left column: Launch -->
     <div class="card">
       <div class="section-title">🚀 Launch / Schedule</div>
       <div class="mode-toggle">
@@ -234,10 +236,7 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
       </form>
       <div id="msg" class="log">Ready • IST • Press Enter to start</div>
     </div>
-
-    <!-- Right column: Meetings, Schedules, Logs -->
     <div style="display:flex;flex-direction:column;gap:16px;">
-      <!-- Meetings -->
       <div class="card">
         <div class="section-title">🟢 Meetings <span style="font-weight:400;font-size:12px;color:var(--muted)">(click for logs)</span></div>
         <div class="search-row">
@@ -252,8 +251,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
           </table>
         </div>
       </div>
-
-      <!-- Scheduled -->
       <div class="card">
         <div class="section-title">📅 Scheduled</div>
         <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled</div></div>
@@ -264,8 +261,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
           </table>
         </div>
       </div>
-
-      <!-- Hugging Face Spaces Control -->
       <div class="card">
         <div class="section-title">🤗 Hugging Face Spaces <span id="hfSpaceCount" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -277,8 +272,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
           <div class="empty">Loading spaces...</div>
         </div>
       </div>
-
-      <!-- Logs -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
@@ -292,7 +285,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     </div>
   </div>
 </div>
-
 <div class="modal-overlay" id="shutdownModal">
   <div class="modal">
     <h3>🛑 Shutdown Server?</h3>
@@ -304,7 +296,6 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     </div>
   </div>
 </div>
-
 <script>
 const API=location.origin;const $=id=>document.getElementById(id);
 (function initTheme(){const saved=localStorage.getItem('zcc-theme')||'dark';applyTheme(saved);})();
@@ -314,7 +305,6 @@ function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
 document.addEventListener('click',e=>{const p=document.querySelector('.theme-pop');if(p&&!p.contains(e.target))$('themeMenu').classList.remove('show');});
 let currentMode='individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
 let allHFSpaces=[];
-
 function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
 function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
@@ -381,21 +371,33 @@ function renderSchedules(schedules){
       <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('');
 }
 function filterMeetings(){renderActive(allMeetings)}
-
-// ---------- HF Wallet & Spaces ----------
 async function fetchWallet(){
-  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent=d.credits; $('hfCredits').textContent=d.credits;}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
+  try{
+    const r=await fetch(API+'/api/wallet');
+    const d=await r.json();
+    if(d.success){
+      const val=(typeof d.credits==='number')?Number(d.credits).toFixed(2):d.credits;
+      $('hfBalance').textContent='$'+val;
+      $('hfCredits').textContent=(d.username?d.username+' • ':'')+val+' USD';
+    }else{
+      $('hfBalance').textContent='No token';
+      $('hfCredits').textContent=d.error||d.detail||'HF_TOKEN missing on Railway';
+    }
+  }catch(e){
+    $('hfBalance').textContent='🚫';
+    $('hfCredits').textContent='wallet fetch fail';
+  }
 }
 async function fetchHFSpaces(){
-  try{const r=await fetch(API+'/api/hf/spaces');const d=await r.json();if(d.success){allHFSpaces=d.spaces;renderHFSpaces(allHFSpaces);}else{show('Spaces error: '+JSON.stringify(d),'err');}}catch(e){show('Spaces fetch fail','err');}
+  try{
+    const r=await fetch(API+'/api/hf/spaces?force_refresh=true');
+    const d=await r.json();
+    if(d.success){allHFSpaces=d.spaces||[];renderHFSpaces(allHFSpaces);}
+    else{show('Spaces error: '+(d.detail||d.error||JSON.stringify(d)),'err');$('hfSpaceList').innerHTML='<div class="empty">'+(d.detail||d.error||'Failed')+'</div>';}
+  }catch(e){show('Spaces fetch fail','err');}
 }
-function getSpaceDisplay(spaceId) {
-    const key = 'hf_name_' + spaceId;
-    return localStorage.getItem(key) || spaceId.split('/').pop();
-}
-function setSpaceDisplay(spaceId, newName) {
-    localStorage.setItem('hf_name_' + spaceId, newName);
-}
+function getSpaceDisplay(spaceId){return localStorage.getItem('hf_name_'+spaceId)||spaceId.split('/').pop();}
+function setSpaceDisplay(spaceId,newName){localStorage.setItem('hf_name_'+spaceId,newName);}
 function renderHFSpaces(spaces){
   const container=$('hfSpaceList');
   $('hfSpaceCount').textContent=`(${spaces.length})`;
@@ -404,79 +406,52 @@ function renderHFSpaces(spaces){
     const status=s.status||'unknown';
     const statusClass=`hf-status-${status}`;
     const statusLabel=status.charAt(0).toUpperCase()+status.slice(1);
-    const displayName = getSpaceDisplay(s.id);
+    const displayName=getSpaceDisplay(s.id);
+    const on=status==='running'?'checked':'';
+    const safeId=String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `<div class="hf-space-item">
-      <div><strong contenteditable="true" data-spaceid="${s.id}" 
-           onblur="updateSpaceName(this)" 
-           style="cursor:text;border-bottom:1px dashed var(--border);">
-           ${displayName}</strong> 
-        <span class="hf-space-status ${statusClass}">${statusLabel}</span></div>
+      <div>
+        <strong contenteditable="true" data-spaceid="${s.id}" onblur="updateSpaceName(this)"
+          style="cursor:text;border-bottom:1px dashed var(--border);">${displayName}</strong>
+        <span class="hf-space-status ${statusClass}">${statusLabel}</span>
+      </div>
       <div class="hf-controls">
-        ${status!=='paused'?`<button class="btn btn-danger btn-sm" onclick="pauseHF('${s.id}')">⏸️</button>`:''}
-        ${status==='paused'?`<button class="btn btn-success btn-sm" onclick="resumeHF('${s.id}')">▶️</button>`:''}
-        <button class="btn btn-outline btn-sm" onclick="refreshHFSpaces()">↻</button>
+        <label class="switch" title="ON = Resume / Running, OFF = Pause">
+          <input type="checkbox" ${on} onchange="toggleHFSpace('${safeId}', this)">
+          <span class="slider"></span>
+        </label>
       </div>
     </div>`;
   }).join('');
 }
-function updateSpaceName(el) {
-    const newName = el.innerText.trim();
-    const spaceId = el.dataset.spaceid;
-    if (newName) setSpaceDisplay(spaceId, newName);
-}
-async function pauseHF(id){
-  if(!confirm(`Pause ${id}?`))return;
+function updateSpaceName(el){const newName=el.innerText.trim();const spaceId=el.dataset.spaceid;if(newName)setSpaceDisplay(spaceId,newName);}
+async function toggleHFSpace(id,el){
+  el.disabled=true;
   try{
-    const r=await fetch(API+'/api/hf/pause/'+id,{method:'POST'});
+    const r=await fetch(API+'/api/hf/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({space_id:id})});
     const data=await r.json();
-    if(r.ok){show(`Paused ${id}`,'ok');refreshHFSpaces();}
-    else show('Error: '+(data.detail||JSON.stringify(data)),'err');
-  }catch(e){show('Error: '+e.message,'err')}
-}
-async function resumeHF(id){
-  if(!confirm(`Resume ${id}?`))return;
-  try{
-    const r=await fetch(API+'/api/hf/resume/'+id,{method:'POST'});
-    const data=await r.json();
-    if(r.ok){show(`Resumed ${id}`,'ok');refreshHFSpaces();}
-    else show('Error: '+(data.detail||JSON.stringify(data)),'err');
-  }catch(e){show('Error: '+e.message,'err')}
+    if(r.ok && data.success){show(data.message||('Toggled '+id),'ok');setTimeout(refreshHFSpaces,1500);}
+    else{el.checked=!el.checked;show('Error: '+(data.detail||data.error||data.message||JSON.stringify(data)),'err');}
+  }catch(e){el.checked=!el.checked;show('Error: '+e.message,'err');}
+  finally{el.disabled=false;}
 }
 async function pauseAllHFSpaces(){
   if(!confirm('Pause ALL HF Spaces?'))return;
-  try{
-    const r=await fetch(API+'/api/hf/pause-all',{method:'POST'});
-    const data=await r.json();
-    if(r.ok){show(`Paused ${data.paused_count} spaces`,'ok');refreshHFSpaces();}
-    else show('Error: '+JSON.stringify(data),'err');
-  }catch(e){show('Error','err')}
+  try{const r=await fetch(API+'/api/hf/pause-all',{method:'POST'});const data=await r.json();if(r.ok){show(`Paused ${data.paused_count} spaces`,'ok');refreshHFSpaces();}else show('Error: '+(data.detail||JSON.stringify(data)),'err');}catch(e){show('Error','err')}
 }
 async function resumeAllHFSpaces(){
   if(!confirm('Resume ALL HF Spaces?'))return;
-  try{
-    const r=await fetch(API+'/api/hf/resume-all',{method:'POST'});
-    const data=await r.json();
-    if(r.ok){show(`Resumed ${data.resumed_count} spaces`,'ok');refreshHFSpaces();}
-    else show('Error: '+JSON.stringify(data),'err');
-  }catch(e){show('Error','err')}
+  try{const r=await fetch(API+'/api/hf/resume-all',{method:'POST'});const data=await r.json();if(r.ok){show(`Resumed ${data.resumed_count} spaces`,'ok');refreshHFSpaces();}else show('Error: '+(data.detail||JSON.stringify(data)),'err');}catch(e){show('Error','err')}
 }
 function refreshHFSpaces(){fetchHFSpaces();}
-
-// ---------- Global Pause ----------
 async function toggleGlobalPause(){
   try{const r=await fetch(API+'/api/pause-status');const d=await r.json();if(d.paused){await fetch(API+'/api/resume',{method:'POST'});$('pauseToggleBtn').textContent='⏸️ Pause';show('Resumed','ok')}else{await fetch(API+'/api/pause',{method:'POST'});$('pauseToggleBtn').textContent='▶️ Resume';show('Paused','warn')}refresh();}catch(e){show('Toggle fail','err')}
 }
-
-// ---------- Main refresh ----------
 async function refresh(){
-  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}
+  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`+(d.hf_token_set===false?' • HF_TOKEN missing':''), d.hf_token_set===false?'err':'ok')}catch(e){show(e.message||'Failed','err')}
 }
-// Update HF spaces less frequently – every 60 seconds
-setInterval(()=>{fetchWallet(); fetchHFSpaces();}, 60000);
-// But also refresh on explicit manual refresh.
+setInterval(()=>{fetchWallet();fetchHFSpaces();},60000);
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
-
-// ---------- Start/Kill ----------
 async function handleStart(){
   if(!isLoggedIn) return show('Upload session JSON first','err');
   const meeting=meetingId.value.trim().replace(/\s/g,'');
@@ -511,13 +486,11 @@ async function deleteSchedule(sid){if(!confirm('Cancel?'))return;try{const r=awa
 function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdownConfirm').value='';$('shutdownConfirm').focus()}
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
 async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type yes');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Shutting down...','ok');closeShutdownModal()}}
-
-// Initial refresh: status, logs, wallet, spaces
 refresh();
 fetchWallet();
 fetchHFSpaces();
-setInterval(refresh, 8000);  // meetings/logs fast
-setInterval(refreshLogs, 3000);
+setInterval(refresh,8000);
+setInterval(refreshLogs,3000);
 </script>
 </body>
 </html>
