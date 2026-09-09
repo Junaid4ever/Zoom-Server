@@ -1,8 +1,8 @@
 # ============================================
 # ZOOM BOT CENTRAL – Railway FULL
-# + HF Wallet + Space Control + Session Locked
+# + HF Wallet + Space Control (Optimised)
 # ============================================
-import os, uuid, asyncio, json, signal, random, httpx
+import os, uuid, asyncio, json, signal, random, httpx, time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -47,6 +47,9 @@ meeting_used_firsts = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
 pause_state = False
+
+# ---------- HF cache ----------
+_hf_cache = {"spaces": None, "timestamp": 0, "ttl": 30}  # seconds
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -151,7 +154,7 @@ class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
-# ---------- SocketIO Events ----------
+# ---------- SocketIO Events (unchanged) ----------
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}", flush=True)
@@ -224,7 +227,7 @@ async def task_completed(sid, data):
 async def bot_log(sid, data):
     add_log(data.get("meeting_code", ""), data.get("message", ""), data.get("level", "info"))
 
-# ---------- HTTP Endpoints ----------
+# ---------- HTTP Endpoints (unchanged except HF) ----------
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -485,57 +488,83 @@ async def resume_all():
 async def pause_status():
     return {"paused": pause_state}
 
-# ---------- Hugging Face Wallet & Space Control ----------
+# ---------- Hugging Face Wallet & Space Control (Optimised) ----------
 @app.get("/api/wallet")
 async def get_wallet_balance():
     token = os.environ.get("HF_TOKEN")
     if not token:
         return JSONResponse(status_code=400, content={"error": "HF_TOKEN not set"})
     try:
+        # Try whoami first for credits
         from huggingface_hub import HfApi
         api = HfApi(token=token)
         user_info = api.whoami()
         credits = user_info.get("credits", 0)
-        if credits is None:
-            credits = 0
+        # If credits is None, try wallet endpoint
+        if credits is None or credits == 0:
+            async with httpx.AsyncClient(timeout=10) as client:
+                headers = {"Authorization": f"Bearer {token}"}
+                resp = await client.get("https://huggingface.co/api/wallet", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # balance is in dollars (float)
+                    balance = data.get("balance", 0)
+                    return {
+                        "success": True,
+                        "username": user_info.get("name"),
+                        "credits": float(balance),
+                        "currency": "USD"
+                    }
         return {
             "success": True,
             "username": user_info.get("name"),
-            "credits": int(credits),
+            "credits": int(credits) if credits is not None else 0,
             "currency": "USD"
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/hf/spaces")
-async def get_my_spaces():
+async def get_my_spaces(force_refresh: bool = False):
+    global _hf_cache
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise HTTPException(400, "HF_TOKEN not set")
     if HfApi is None or list_spaces is None:
         raise HTTPException(500, "huggingface_hub not installed")
+    # Check cache
+    now = time.time()
+    if not force_refresh and _hf_cache["spaces"] and (now - _hf_cache["timestamp"] < _hf_cache["ttl"]):
+        return {"success": True, "spaces": _hf_cache["spaces"], "cached": True}
     try:
         api = HfApi(token=token)
         user = api.whoami()["name"]
         spaces = list_spaces(author=user)
-        result = []
-        for space in spaces:
-            # Fetch runtime status
+        # Fetch runtime statuses concurrently
+        async def fetch_runtime(space):
             try:
                 runtime = api.get_space_runtime(space.id)
                 status = runtime.get("status", "unknown")
             except Exception:
                 status = "unknown"
-            result.append({
+            return {
                 "id": space.id,
                 "name": space.id.split("/")[-1],
                 "status": status,
                 "runtime": getattr(space, "runtime", {}),
                 "sdk": getattr(space, "sdk", "unknown"),
                 "likes": getattr(space, "likes", 0),
-            })
-        return {"success": True, "spaces": result}
+            }
+        tasks = [fetch_runtime(s) for s in spaces]
+        results = await asyncio.gather(*tasks)
+        # Cache
+        _hf_cache["spaces"] = results
+        _hf_cache["timestamp"] = now
+        return {"success": True, "spaces": results, "cached": False}
     except Exception as e:
+        # Return cached if available
+        if _hf_cache["spaces"]:
+            return {"success": True, "spaces": _hf_cache["spaces"], "cached": True, "warning": str(e)}
         raise HTTPException(500, str(e))
 
 @app.post("/api/hf/pause/{space_id}")
@@ -545,9 +574,15 @@ async def pause_space(space_id: str):
         raise HTTPException(400, "HF_TOKEN not set")
     try:
         api = HfApi(token=token)
-        api.pause_space(space_id)
-        add_log("-", f"⏸️ Paused HF Space: {space_id}", "ok")
-        return {"success": True, "message": f"Paused {space_id}"}
+        # Check current status – only pause if running
+        runtime = api.get_space_runtime(space_id)
+        status = runtime.get("status", "unknown")
+        if status == "running":
+            api.pause_space(space_id)
+            add_log("-", f"⏸️ Paused HF Space: {space_id}", "ok")
+            return {"success": True, "message": f"Paused {space_id}"}
+        else:
+            return {"success": False, "message": f"Space is not running (status: {status})"}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -558,7 +593,8 @@ async def resume_space(space_id: str):
         raise HTTPException(400, "HF_TOKEN not set")
     try:
         api = HfApi(token=token)
-        api.restart_space(space_id)   # Restart = Resume
+        # Restart works for paused/stopped
+        api.restart_space(space_id)
         add_log("-", f"▶️ Resumed HF Space: {space_id}", "ok")
         return {"success": True, "message": f"Resumed {space_id}"}
     except Exception as e:
@@ -575,17 +611,18 @@ async def pause_all_spaces():
         spaces = list_spaces(author=user)
         count = 0
         for space in spaces:
-            # Check current status
             try:
                 runtime = api.get_space_runtime(space.id)
                 status = runtime.get("status", "unknown")
+                if status == "running":
+                    api.pause_space(space.id)
+                    count += 1
+                    await asyncio.sleep(0.3)
             except Exception:
-                status = "unknown"
-            if status != "paused":
-                api.pause_space(space.id)
-                count += 1
-                await asyncio.sleep(0.3)
+                pass
         add_log("-", f"⏸️ Paused {count} HF Spaces", "ok")
+        # Invalidate cache
+        _hf_cache["spaces"] = None
         return {"success": True, "paused_count": count}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -604,13 +641,14 @@ async def resume_all_spaces():
             try:
                 runtime = api.get_space_runtime(space.id)
                 status = runtime.get("status", "unknown")
+                if status in ("paused", "stopped"):
+                    api.restart_space(space.id)
+                    count += 1
+                    await asyncio.sleep(0.3)
             except Exception:
-                status = "unknown"
-            if status == "paused":
-                api.restart_space(space.id)
-                count += 1
-                await asyncio.sleep(0.3)
+                pass
         add_log("-", f"▶️ Resumed {count} HF Spaces", "ok")
+        _hf_cache["spaces"] = None
         return {"success": True, "resumed_count": count}
     except Exception as e:
         raise HTTPException(500, str(e))
