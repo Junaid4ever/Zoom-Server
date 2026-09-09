@@ -187,7 +187,7 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">currently allocated</div></div>
     <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live sessions</div></div>
     <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">command center</div></div>
-    <div class="stat"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span></div></div>
+    <div class="stat" style="cursor:pointer" title="Click to set credits if API returns 0" onclick="manualHfCredits()"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span></div></div>
   </div>
   <div class="grid">
     <div class="card">
@@ -382,6 +382,19 @@ function renderSchedules(schedules){
       <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('');
 }
 function filterMeetings(){renderActive(allMeetings)}
+async function manualHfCredits(){
+  const cur=$('hfBalance').textContent.replace(/[^0-9.]/g,'');
+  const v=prompt('HF Credits (USD) — billing page se exact number daalo', cur||'49.75');
+  if(v==null||v==='')return;
+  const n=parseFloat(v);
+  if(isNaN(n))return show('Invalid number','err');
+  try{
+    const r=await fetch(API+'/api/wallet/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credits:n})});
+    const d=await r.json();
+    if(r.ok){$('hfBalance').textContent='$'+n.toFixed(2);show('Credits set $'+n.toFixed(2),'ok');}
+    else show(d.detail||'override fail','err');
+  }catch(e){show(e.message,'err')}
+}
 async function fetchWallet(){
   try{
     const r=await fetch(API+'/api/wallet');
