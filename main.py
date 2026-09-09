@@ -1,6 +1,6 @@
 # ============================================
 # ZOOM BOT CENTRAL – Railway FULL
-# + HF Wallet + Space Control
+# + HF Wallet + Space Control + Session Locked
 # ============================================
 import os, uuid, asyncio, json, signal, random, httpx
 from collections import deque
@@ -46,7 +46,7 @@ meeting_logs, global_logs = {}, deque(maxlen=400)
 meeting_used_firsts = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
-pause_state = False   # Global pause flag
+pause_state = False
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -93,7 +93,6 @@ def load_state():
     except Exception as e:
         print(f"load_state err: {e}", flush=True)
 
-# ---------- Existing helper functions (ok_first, allocate_unique_firsts) ----------
 def _ok_first(name, used):
     if not name:
         return False
@@ -493,21 +492,15 @@ async def get_wallet_balance():
     if not token:
         return JSONResponse(status_code=400, content={"error": "HF_TOKEN not set"})
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            headers = {"Authorization": f"Bearer {token}"}
-            resp = await client.get("https://huggingface.co/api/wallet", headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "success": True,
-                    "balance": data.get("balance", 0),
-                    "compute_total": data.get("totalComputeCredits", 0),
-                    "compute_used": data.get("usedComputeCredits", 0),
-                    "compute_remaining": data.get("remainingComputeCredits", 0),
-                    "currency": "USD"
-                }
-            else:
-                return JSONResponse(status_code=resp.status_code, content={"error": f"HF API: {resp.status_code}", "details": resp.text})
+        from huggingface_hub import HfApi
+        api = HfApi(token=token)
+        user_info = api.whoami()
+        return {
+            "success": True,
+            "username": user_info.get("name"),
+            "credits": user_info.get("credits", 0),
+            "currency": "USD"
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -516,16 +509,14 @@ async def get_my_spaces():
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise HTTPException(400, "HF_TOKEN not set")
-    if not HfApi:
+    if HfApi is None or list_spaces is None:
         raise HTTPException(500, "huggingface_hub not installed")
     try:
         api = HfApi(token=token)
-        # list all spaces of the authenticated user
-        spaces = list_spaces(author=api.whoami()["name"])  # or use api.list_spaces
+        user = api.whoami()["name"]
+        spaces = list_spaces(author=user)
         result = []
         for space in spaces:
-            # space has attributes: id, status, runtime, etc.
-            # using space.__dict__ to get all
             result.append({
                 "id": space.id,
                 "name": space.id.split("/")[-1],
