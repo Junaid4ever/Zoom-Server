@@ -383,7 +383,7 @@ function filterMeetings(){renderActive(allMeetings)}
 
 // ---------- HF Wallet & Spaces ----------
 async function fetchWallet(){
-  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent='$'+d.balance.toFixed(2);$('hfCredits').textContent=d.compute_remaining||'--';}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
+  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent='$'+ (d.credits || 0).toFixed(2);$('hfCredits').textContent=d.credits||'--';}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
 }
 async function fetchHFSpaces(){
   try{const r=await fetch(API+'/api/hf/spaces');const d=await r.json();if(d.success){allHFSpaces=d.spaces;renderHFSpaces(allHFSpaces);}else{show('Spaces error: '+d.error,'err');}}catch(e){show('Spaces fetch fail','err');}
