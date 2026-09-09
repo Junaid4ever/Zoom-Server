@@ -262,7 +262,10 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
         </div>
       </div>
       <div class="card">
-        <div class="section-title">🤗 Hugging Face Spaces <span id="hfSpaceCount" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
+        <div class="section-title" style="cursor:pointer;margin-bottom:8px;" onclick="toggleHfPanel()">🤗 Hugging Face Spaces <span id="hfSpaceCount" style="font-weight:400;color:var(--muted);font-size:12px;"></span>
+          <span id="hfCollapseHint" style="margin-left:auto;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;">▸ expand</span>
+        </div>
+        <div id="hfPanelBody" style="display:none;">
         <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:12px;font-weight:800;color:var(--muted);">ALL</span>
@@ -271,12 +274,13 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
               <span class="slider"></span>
             </label>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="refreshHFSpaces()">↻ Refresh</button>
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();refreshHFSpaces()">↻ Refresh</button>
         </div>
         <div style="font-size:11px;font-weight:800;color:var(--success);margin:8px 0 6px;">RUNNING</div>
         <div id="hfRunningList"><div class="empty">None running</div></div>
         <div style="font-size:11px;font-weight:800;color:var(--muted);margin:14px 0 6px;">PAUSED / STOPPED</div>
         <div id="hfPausedList"><div class="empty">None paused</div></div>
+        </div>
       </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -305,13 +309,14 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
 <script>
 const API=location.origin;const $=id=>document.getElementById(id);
 (function initTheme(){const saved=localStorage.getItem('zcc-theme')||'dark';applyTheme(saved);})();
+setTimeout(()=>setMode(localStorage.getItem('zcc-join-mode')||'individual'),0);
 function applyTheme(theme){if(theme==='system'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',theme);}localStorage.setItem('zcc-theme',theme);}
 function setTheme(theme){applyTheme(theme);$('themeMenu').classList.remove('show')}
 function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
 document.addEventListener('click',e=>{const p=document.querySelector('.theme-pop');if(p&&!p.contains(e.target))$('themeMenu').classList.remove('show');});
-let currentMode='individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
+let currentMode=localStorage.getItem('zcc-join-mode')||'individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
 let allHFSpaces=[];
-function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
+function setMode(m){currentMode=m;localStorage.setItem('zcc-join-mode',m);$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
 function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
 function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
@@ -384,7 +389,8 @@ async function fetchWallet(){
     if(d.success){
       const val=Number(d.credits||0);
       $('hfBalance').textContent='$'+val.toFixed(2);
-      $('hfCredits').textContent=(d.username||'')+(d.plan?(' • '+d.plan):'')+' • USD';
+      const extra=d.usage!=null?(' • used $'+Number(d.usage).toFixed(2)):'';
+      $('hfCredits').textContent=(d.username||'HF')+extra+' • USD';
     }else{
       $('hfBalance').textContent='No token';
       $('hfCredits').textContent=d.error||d.detail||'Set HF_TOKEN on Railway';
@@ -404,15 +410,24 @@ async function fetchHFSpaces(force){
   }catch(e){show('Spaces fetch fail','err');}
 }
 function getSpaceDisplay(s){return s.alias||localStorage.getItem('hf_name_'+s.id)||s.name||s.id.split('/').pop();}
+function toggleHfPanel(){
+  const body=$('hfPanelBody'), hint=$('hfCollapseHint');
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'block';
+  hint.textContent=open?'▸ expand':'▾ collapse';
+}
 function hfRow(s){
   const status=s.status||'unknown';
   const displayName=getSpaceDisplay(s);
   const on=status==='running'?'checked':'';
   const safeId=String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   return `<div class="hf-space-item">
-      <div>
-        <strong contenteditable="true" data-spaceid="${s.id}" onblur="updateSpaceName(this)"
-          style="cursor:text;border-bottom:1px dashed var(--border);">${displayName}</strong>
+      <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <strong id="hfName-${s.id.replace(/[^a-zA-Z0-9_-]/g,'_')}" data-spaceid="${s.id}"
+            style="cursor:default;">${displayName}</strong>
+          <button class="btn btn-outline btn-sm" title="Rename" onclick="event.stopPropagation();startRename(this,'${safeId}')">✏️</button>
+        </div>
         <div style="font-size:10px;color:var(--muted);margin-top:2px;">${s.id}</div>
       </div>
       <div class="hf-controls">
@@ -423,6 +438,13 @@ function hfRow(s){
         </label>
       </div>
     </div>`;
+}
+function startRename(btn, spaceId){
+  const name=prompt('New display name for this space:', getSpaceDisplay(allHFSpaces.find(x=>x.id===spaceId)||{id:spaceId}));
+  if(!name) return;
+  const el={innerText:name, dataset:{spaceid:spaceId}};
+  updateSpaceName(el);
+  renderHFSpaces(allHFSpaces);
 }
 function renderHFSpaces(spaces){
   $('hfSpaceCount').textContent=`(${spaces.length})`;
@@ -483,7 +505,7 @@ async function toggleGlobalPause(){
 async function refresh(){
   try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`+(d.hf_token_set===false?' • HF_TOKEN missing':''), d.hf_token_set===false?'err':'ok')}catch(e){show(e.message||'Failed','err')}
 }
-setInterval(()=>{fetchWallet();fetchHFSpaces(false);},60000);
+setInterval(fetchWallet,15000); setInterval(()=>fetchHFSpaces(false),60000);
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
 async function handleStart(){
   if(!isLoggedIn) return show('Upload session JSON first','err');
