@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Zoom Command Center • Control Deck</title>
 <style>
+/* same as before – no changes needed */
 :root{
   --bg:#070b14; --bg2:#0b1220; --surface:rgba(15,23,42,.78);
   --surface2:rgba(17,28,49,.9); --input:#0b1424; --border:rgba(148,163,184,.16);
@@ -428,7 +429,7 @@ async function pauseHF(id){
   try{
     const r=await fetch(API+'/api/hf/pause/'+id,{method:'POST'});
     const data=await r.json();
-    if(r.ok){show(`Paused ${id}`,'ok');fetchHFSpaces();}
+    if(r.ok){show(`Paused ${id}`,'ok');refreshHFSpaces();}
     else show('Error: '+(data.detail||JSON.stringify(data)),'err');
   }catch(e){show('Error: '+e.message,'err')}
 }
@@ -437,7 +438,7 @@ async function resumeHF(id){
   try{
     const r=await fetch(API+'/api/hf/resume/'+id,{method:'POST'});
     const data=await r.json();
-    if(r.ok){show(`Resumed ${id}`,'ok');fetchHFSpaces();}
+    if(r.ok){show(`Resumed ${id}`,'ok');refreshHFSpaces();}
     else show('Error: '+(data.detail||JSON.stringify(data)),'err');
   }catch(e){show('Error: '+e.message,'err')}
 }
@@ -446,7 +447,7 @@ async function pauseAllHFSpaces(){
   try{
     const r=await fetch(API+'/api/hf/pause-all',{method:'POST'});
     const data=await r.json();
-    if(r.ok){show(`Paused ${data.paused_count} spaces`,'ok');fetchHFSpaces();}
+    if(r.ok){show(`Paused ${data.paused_count} spaces`,'ok');refreshHFSpaces();}
     else show('Error: '+JSON.stringify(data),'err');
   }catch(e){show('Error','err')}
 }
@@ -455,7 +456,7 @@ async function resumeAllHFSpaces(){
   try{
     const r=await fetch(API+'/api/hf/resume-all',{method:'POST'});
     const data=await r.json();
-    if(r.ok){show(`Resumed ${data.resumed_count} spaces`,'ok');fetchHFSpaces();}
+    if(r.ok){show(`Resumed ${data.resumed_count} spaces`,'ok');refreshHFSpaces();}
     else show('Error: '+JSON.stringify(data),'err');
   }catch(e){show('Error','err')}
 }
@@ -468,8 +469,11 @@ async function toggleGlobalPause(){
 
 // ---------- Main refresh ----------
 async function refresh(){
-  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();fetchWallet();fetchHFSpaces();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}
+  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}
 }
+// Update HF spaces less frequently – every 60 seconds
+setInterval(()=>{fetchWallet(); fetchHFSpaces();}, 60000);
+// But also refresh on explicit manual refresh.
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
 
 // ---------- Start/Kill ----------
@@ -508,9 +512,12 @@ function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdown
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
 async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type yes');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Shutting down...','ok');closeShutdownModal()}}
 
-setInterval(refresh,8000);
-setInterval(refreshLogs,3000);
+// Initial refresh: status, logs, wallet, spaces
 refresh();
+fetchWallet();
+fetchHFSpaces();
+setInterval(refresh, 8000);  // meetings/logs fast
+setInterval(refreshLogs, 3000);
 </script>
 </body>
 </html>
