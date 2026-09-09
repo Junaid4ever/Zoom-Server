@@ -72,6 +72,13 @@ def save_state():
             "pause_state": pause_state,
             "hf_aliases": hf_aliases,
         }
+        if os.path.exists(STATE_FILE):
+            try:
+                oldd=json.load(open(STATE_FILE))
+                if oldd.get("hf_credits_override") is not None:
+                    data["hf_credits_override"]=oldd.get("hf_credits_override")
+            except Exception:
+                pass
         with open(STATE_FILE, "w") as f:
             json.dump(data, f)
     except Exception as e:
@@ -647,6 +654,20 @@ async def get_wallet_balance():
             except Exception:
                 pass
 
+        if credits is not None and credits >= 100 and abs(credits - int(credits)) < 1e-9:
+            as_dollars = credits / 100.0
+            if 0.5 <= as_dollars <= 50000:
+                credits, source = as_dollars, (str(source or "") + "+cents")
+        saved = None
+        try:
+            if os.path.exists(STATE_FILE):
+                saved = json.load(open(STATE_FILE)).get("hf_credits_override")
+                if saved is not None:
+                    saved = float(saved)
+        except Exception:
+            saved = None
+        if (credits is None or float(credits) == 0) and saved:
+            credits, source = saved, "override"
         if credits is None:
             credits = 0.0
             source = source or "no-public-wallet-field"
@@ -660,6 +681,23 @@ async def get_wallet_balance():
             "source": source,
             "token_ok": True,
         }
+
+class HFCreditsOverride(BaseModel):
+    credits: float
+
+@app.post("/api/wallet/override")
+async def wallet_override(body: HFCreditsOverride):
+    global hf_aliases
+    data = {}
+    if os.path.exists(STATE_FILE):
+        try:
+            data = json.load(open(STATE_FILE))
+        except Exception:
+            data = {}
+    data["hf_credits_override"] = float(body.credits)
+    with open(STATE_FILE, "w") as f:
+        json.dump(data, f)
+    return {"success": True, "credits": float(body.credits)}
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
