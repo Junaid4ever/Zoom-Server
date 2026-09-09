@@ -182,7 +182,7 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">currently allocated</div></div>
     <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live sessions</div></div>
     <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">command center</div></div>
-    <div class="stat"><div class="stat-k">💰 HF Wallet</div><div class="stat-v" id="hfBalance">$--</div><div class="stat-s"><span id="hfCredits">--</span> credits left</div></div>
+    <div class="stat"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span> credits left</div></div>
   </div>
 
   <div class="grid">
@@ -312,7 +312,7 @@ function setTheme(theme){applyTheme(theme);$('themeMenu').classList.remove('show
 function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
 document.addEventListener('click',e=>{const p=document.querySelector('.theme-pop');if(p&&!p.contains(e.target))$('themeMenu').classList.remove('show');});
 let currentMode='individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
-let allHFSpaces=[],hfPauseState=false;
+let allHFSpaces=[];
 
 function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
@@ -383,31 +383,82 @@ function filterMeetings(){renderActive(allMeetings)}
 
 // ---------- HF Wallet & Spaces ----------
 async function fetchWallet(){
-  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent='$'+ (d.credits || 0).toFixed(2);$('hfCredits').textContent=d.credits||'--';}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
+  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent=d.credits; $('hfCredits').textContent=d.credits;}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
 }
 async function fetchHFSpaces(){
-  try{const r=await fetch(API+'/api/hf/spaces');const d=await r.json();if(d.success){allHFSpaces=d.spaces;renderHFSpaces(allHFSpaces);}else{show('Spaces error: '+d.error,'err');}}catch(e){show('Spaces fetch fail','err');}
+  try{const r=await fetch(API+'/api/hf/spaces');const d=await r.json();if(d.success){allHFSpaces=d.spaces;renderHFSpaces(allHFSpaces);}else{show('Spaces error: '+JSON.stringify(d),'err');}}catch(e){show('Spaces fetch fail','err');}
+}
+function getSpaceDisplay(spaceId) {
+    const key = 'hf_name_' + spaceId;
+    return localStorage.getItem(key) || spaceId.split('/').pop();
+}
+function setSpaceDisplay(spaceId, newName) {
+    localStorage.setItem('hf_name_' + spaceId, newName);
 }
 function renderHFSpaces(spaces){
-  const container=$('hfSpaceList');$('hfSpaceCount').textContent=`(${spaces.length})`;
+  const container=$('hfSpaceList');
+  $('hfSpaceCount').textContent=`(${spaces.length})`;
   if(!spaces.length){container.innerHTML='<div class="empty">No spaces found</div>';return;}
   container.innerHTML=spaces.map(s=>{
     const status=s.status||'unknown';
     const statusClass=`hf-status-${status}`;
     const statusLabel=status.charAt(0).toUpperCase()+status.slice(1);
+    const displayName = getSpaceDisplay(s.id);
     return `<div class="hf-space-item">
-      <div><strong>${s.name}</strong> <span class="hf-space-status ${statusClass}">${statusLabel}</span></div>
+      <div><strong contenteditable="true" data-spaceid="${s.id}" 
+           onblur="updateSpaceName(this)" 
+           style="cursor:text;border-bottom:1px dashed var(--border);">
+           ${displayName}</strong> 
+        <span class="hf-space-status ${statusClass}">${statusLabel}</span></div>
       <div class="hf-controls">
         ${status!=='paused'?`<button class="btn btn-danger btn-sm" onclick="pauseHF('${s.id}')">⏸️</button>`:''}
         ${status==='paused'?`<button class="btn btn-success btn-sm" onclick="resumeHF('${s.id}')">▶️</button>`:''}
+        <button class="btn btn-outline btn-sm" onclick="refreshHFSpaces()">↻</button>
       </div>
     </div>`;
   }).join('');
 }
-async function pauseHF(id){if(!confirm(`Pause ${id}?`))return;try{await fetch(API+'/api/hf/pause/'+id,{method:'POST'});show(`Paused ${id}`,'ok');refreshHFSpaces();}catch(e){show('Error','err')}}
-async function resumeHF(id){if(!confirm(`Resume ${id}?`))return;try{await fetch(API+'/api/hf/resume/'+id,{method:'POST'});show(`Resumed ${id}`,'ok');refreshHFSpaces();}catch(e){show('Error','err')}}
-async function pauseAllHFSpaces(){if(!confirm('Pause ALL HF Spaces?'))return;try{await fetch(API+'/api/hf/pause-all',{method:'POST'});show('Paused all','ok');refreshHFSpaces();}catch(e){}}
-async function resumeAllHFSpaces(){if(!confirm('Resume ALL HF Spaces?'))return;try{await fetch(API+'/api/hf/resume-all',{method:'POST'});show('Resumed all','ok');refreshHFSpaces();}catch(e){}}
+function updateSpaceName(el) {
+    const newName = el.innerText.trim();
+    const spaceId = el.dataset.spaceid;
+    if (newName) setSpaceDisplay(spaceId, newName);
+}
+async function pauseHF(id){
+  if(!confirm(`Pause ${id}?`))return;
+  try{
+    const r=await fetch(API+'/api/hf/pause/'+id,{method:'POST'});
+    const data=await r.json();
+    if(r.ok){show(`Paused ${id}`,'ok');fetchHFSpaces();}
+    else show('Error: '+(data.detail||JSON.stringify(data)),'err');
+  }catch(e){show('Error: '+e.message,'err')}
+}
+async function resumeHF(id){
+  if(!confirm(`Resume ${id}?`))return;
+  try{
+    const r=await fetch(API+'/api/hf/resume/'+id,{method:'POST'});
+    const data=await r.json();
+    if(r.ok){show(`Resumed ${id}`,'ok');fetchHFSpaces();}
+    else show('Error: '+(data.detail||JSON.stringify(data)),'err');
+  }catch(e){show('Error: '+e.message,'err')}
+}
+async function pauseAllHFSpaces(){
+  if(!confirm('Pause ALL HF Spaces?'))return;
+  try{
+    const r=await fetch(API+'/api/hf/pause-all',{method:'POST'});
+    const data=await r.json();
+    if(r.ok){show(`Paused ${data.paused_count} spaces`,'ok');fetchHFSpaces();}
+    else show('Error: '+JSON.stringify(data),'err');
+  }catch(e){show('Error','err')}
+}
+async function resumeAllHFSpaces(){
+  if(!confirm('Resume ALL HF Spaces?'))return;
+  try{
+    const r=await fetch(API+'/api/hf/resume-all',{method:'POST'});
+    const data=await r.json();
+    if(r.ok){show(`Resumed ${data.resumed_count} spaces`,'ok');fetchHFSpaces();}
+    else show('Error: '+JSON.stringify(data),'err');
+  }catch(e){show('Error','err')}
+}
 function refreshHFSpaces(){fetchHFSpaces();}
 
 // ---------- Global Pause ----------
