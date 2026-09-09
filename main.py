@@ -554,6 +554,24 @@ def _patch_cache_status(space_id, status):
             s["stage"] = status
             break
 
+def _pick_credit(hits):
+    if not hits:
+        return None, None
+    prefer = ("prepaid", "creditbalance", "creditsbalance", "currentbalance", "availablecredit", "walletbalance", "remainingcredit", "balance")
+    ranked = []
+    for path, val in hits:
+        lp = path.lower().replace("_", "")
+        if val <= 0:
+            continue
+        if any(x in lp for x in ("usage", "spent", "period", "invoice", "threshold")):
+            continue
+        score = 2 if any(x in lp for x in prefer) else 1
+        ranked.append((score, val, path))
+    if not ranked:
+        return None, None
+    ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return ranked[0][1], ranked[0][2]
+
 @app.get("/api/wallet")
 async def get_wallet_balance():
     token = _hf_token()
@@ -562,58 +580,83 @@ async def get_wallet_balance():
     username = None
     plan = None
     credits = None
+    usage = None
     source = None
     try:
-        headers = {"Authorization": f"Bearer {token}"}
-        async with httpx.AsyncClient(timeout=12) as client:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json,text/html",
+            "User-Agent": "ZoomBotCentral/1.0",
+        }
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             r = await client.get("https://huggingface.co/api/whoami-v2", headers=headers)
             if r.status_code != 200:
                 return JSONResponse(status_code=400, content={"success": False, "error": f"Token invalid ({r.status_code})"})
             info = r.json()
             username = info.get("name")
             auth = info.get("auth") or {}
-            plan = (info.get("plan") or auth.get("type") or info.get("type") or "").lower() or None
-            hits = _walk_credits(info)
-            if hits:
-                credits, source = hits[0][1], hits[0][0]
-
+            plan = info.get("isPro") and "pro" or (auth.get("type") or info.get("type") or "")
             now = now_ist()
-            start = now.replace(day=1).strftime("%Y-%m-%d")
-            nxt_month = (now.replace(day=28) + timedelta(days=8)).replace(day=1).strftime("%Y-%m-%d")
+            start = int(datetime(now.year, now.month, 1, tzinfo=IST).timestamp() * 1000)
+            nxt = (now.replace(day=28) + timedelta(days=8)).replace(day=1)
+            end = int(datetime(nxt.year, nxt.month, 1, tzinfo=IST).timestamp() * 1000)
             urls = [
-                "https://huggingface.co/api/wallet",
                 "https://huggingface.co/api/settings/billing",
+                "https://huggingface.co/api/settings/billing/usage",
+                f"https://huggingface.co/api/settings/billing/usage-v2?startDate={start}&endDate={end}",
+                "https://huggingface.co/api/wallet",
                 "https://huggingface.co/api/billing",
-                "https://huggingface.co/api/billing/overview",
-                "https://huggingface.co/api/overview",
-                f"https://huggingface.co/api/users/{username}/billing" if username else None,
-                f"https://huggingface.co/api/organizations/{username}/billing/usage-v2?startDate={start}&endDate={nxt_month}" if username else None,
+                "https://huggingface.co/api/payments",
+                "https://huggingface.co/api/settings/billing/credits",
+                f"https://huggingface.co/api/users/{username}/overview" if username else None,
             ]
+            all_hits = []
             for url in [u for u in urls if u]:
                 try:
                     resp = await client.get(url, headers=headers)
                     if resp.status_code != 200:
                         continue
-                    data = resp.json()
-                    more = _walk_credits(data)
-                    if more:
-                        # prefer remaining/balance over spent
-                        more.sort(key=lambda x: 0 if any(k in x[0].lower() for k in ("remain", "balance", "credit", "wallet")) else 1)
-                        credits, source = more[0][1], url
-                        break
+                    ctype = resp.headers.get("content-type", "")
+                    if "json" in ctype:
+                        data = resp.json()
+                        all_hits.extend(_walk_credits(data))
+                        val, src = _pick_credit(_walk_credits(data))
+                        if val is not None and (credits is None or val > credits):
+                            credits, source = val, url
+                        uhits = [h for h in _walk_credits(data) if "usage" in h[0].lower() or "spent" in h[0].lower()]
+                        if uhits:
+                            usage = max(x[1] for x in uhits)
                 except Exception:
                     continue
 
+            # Billing page HTML often contains the exact "$49.75" credits figure
+            try:
+                page = await client.get("https://huggingface.co/settings/billing", headers=headers)
+                if page.status_code == 200:
+                    import re
+                    text = page.text
+                    # next.js embedded JSON
+                    for m in re.finditer(r'"(?:credits|creditBalance|prepaidCredits|currentBalance|balance)"\s*:\s*([0-9]+(?:\.[0-9]+)?)', text, re.I):
+                        val = float(m.group(1))
+                        if val > (credits or 0):
+                            credits, source = val, "billing-page-json"
+                    for m in re.finditer(r'Credits[^$]{0,80}\$([0-9]+(?:\.[0-9]+)?)', text, re.I):
+                        val = float(m.group(1))
+                        if 0.01 <= val <= 100000 and val > (credits or 0):
+                            credits, source = val, "billing-page-html"
+            except Exception:
+                pass
+
         if credits is None:
-            # HF personal wallet API often locked; still return a visible number + plan
             credits = 0.0
             source = source or "no-public-wallet-field"
         return {
             "success": True,
             "username": username,
             "credits": float(credits),
+            "usage": usage,
             "currency": "USD",
-            "plan": plan,
+            "plan": str(plan or ""),
             "source": source,
             "token_ok": True,
         }
