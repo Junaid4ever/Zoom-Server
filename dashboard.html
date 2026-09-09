@@ -93,7 +93,7 @@ body:before{
 .btn-success{background:rgba(5,150,105,.13);border-color:rgba(5,150,105,.25);color:var(--success)}
 .btn-sm{padding:6px 10px;font-size:11px;border-radius:9px}.btn-outline{background:var(--input);border-color:var(--border);color:var(--muted)}
 .mobile-only{display:block}.desktop-only{display:none}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .stat{padding:14px;border:1px solid var(--border);border-radius:15px;background:var(--input)}
 .stat-k{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px}.stat-v{font-size:22px;font-weight:900;margin-top:5px}.stat-s{font-size:10px;color:var(--muted);margin-top:2px}
 .meeting-card{background:var(--input);border:1px solid var(--border);border-radius:15px;padding:14px;margin-bottom:9px;cursor:pointer;transition:.18s}
@@ -108,6 +108,8 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
 .badge-slow{background:rgba(217,119,6,.12);color:var(--warning)}.badge-together{background:rgba(5,150,105,.12);color:var(--success)}
 .badge-indian{background:rgba(37,99,235,.12);color:var(--primary)}.badge-english{background:rgba(5,150,105,.12);color:var(--success)}.badge-custom{background:rgba(124,58,237,.13);color:#a78bfa}
 .badge-running{background:rgba(5,150,105,.12);color:var(--success)}.badge-completed{background:rgba(100,116,139,.13);color:var(--muted)}
+.badge-paused{background:rgba(100,116,139,.13);color:var(--muted)}
+.badge-stopped{background:rgba(220,53,69,.13);color:var(--danger)}
 .countdown{font-family:ui-monospace,monospace;color:var(--warning);font-weight:800;font-size:11px}
 .search-row{display:flex;gap:8px;margin-bottom:11px}.search-row input{flex:1;min-width:0}
 .log{margin-top:12px;padding:10px 12px;background:var(--input);border:1px solid var(--border);border-radius:11px;font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;word-break:break-word}
@@ -121,9 +123,15 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
 .theme-pop{position:relative}.theme-menu{display:none;position:absolute;right:0;top:42px;padding:9px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);min-width:150px;z-index:100}
 .theme-menu.show{display:block}.theme-menu button{display:block;width:100%;text-align:left;padding:9px;border:0;background:transparent;color:var(--text);border-radius:8px;cursor:pointer}.theme-menu button:hover{background:var(--input)}
 #customBox{background:var(--input)!important;border-color:var(--border)!important}#customNames{background:var(--surface2)!important;border-color:var(--border)!important;color:var(--text)!important}
+.hf-space-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:4px;background:var(--input);border-radius:8px;border:1px solid var(--border);font-size:13px}
+.hf-space-status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.hf-status-running{background:rgba(5,150,105,.2);color:var(--success)}
+.hf-status-paused{background:rgba(100,116,139,.2);color:var(--muted)}
+.hf-status-stopped{background:rgba(220,53,69,.2);color:var(--danger)}
+.hf-controls{display:flex;gap:6px}
 @media(min-width:1000px){.mobile-only{display:none}.desktop-only{display:block}}
 @media(max-width:999px){.grid{grid-template-columns:1fr}.header{position:relative;top:0}}
-@media(max-width:767px){body{padding:10px}.card{padding:14px;border-radius:17px}.form-row,.schedule-fields.show{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr 1fr}.stat{padding:11px}.stat-v{font-size:18px}.header h1{font-size:16px}.header-right{width:100%}.header-right .usage,.header-right .clock{display:none}.btn{padding:12px 13px}}
+@media(max-width:767px){body{padding:10px}.card{padding:14px;border-radius:17px}.form-row,.schedule-fields.show{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.stat{padding:11px}.stat-v{font-size:18px}.header h1{font-size:16px}.header-right{width:100%}.header-right .usage,.header-right .clock{display:none}.btn{padding:12px 13px}}
 </style>
 </head>
 <body>
@@ -152,6 +160,7 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
       <button class="btn btn-danger btn-sm" onclick="openShutdownModal()">🛑 Shutdown</button>
     </div>
   </div>
+
   <div class="card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
@@ -167,12 +176,17 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
       </div>
     </div>
   </div>
+
+  <!-- Stats -->
   <div class="stats">
     <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">currently allocated</div></div>
     <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live sessions</div></div>
     <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">command center</div></div>
+    <div class="stat"><div class="stat-k">💰 HF Wallet</div><div class="stat-v" id="hfBalance">$--</div><div class="stat-s"><span id="hfCredits">--</span> credits left</div></div>
   </div>
+
   <div class="grid">
+    <!-- Left column: Launch -->
     <div class="card">
       <div class="section-title">🚀 Launch / Schedule</div>
       <div class="mode-toggle">
@@ -214,11 +228,15 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
         <div class="btn-row">
           <button type="submit" class="btn btn-primary" id="startBtn">▶ Start Now</button>
           <button type="button" class="btn btn-danger" onclick="killAll()">Kill All</button>
+          <button type="button" class="btn btn-outline" id="pauseToggleBtn" onclick="toggleGlobalPause()">⏸️ Pause</button>
         </div>
       </form>
       <div id="msg" class="log">Ready • IST • Press Enter to start</div>
     </div>
+
+    <!-- Right column: Meetings, Schedules, Logs -->
     <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Meetings -->
       <div class="card">
         <div class="section-title">🟢 Meetings <span style="font-weight:400;font-size:12px;color:var(--muted)">(click for logs)</span></div>
         <div class="search-row">
@@ -233,6 +251,8 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
           </table>
         </div>
       </div>
+
+      <!-- Scheduled -->
       <div class="card">
         <div class="section-title">📅 Scheduled</div>
         <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled</div></div>
@@ -243,6 +263,21 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
           </table>
         </div>
       </div>
+
+      <!-- Hugging Face Spaces Control -->
+      <div class="card">
+        <div class="section-title">🤗 Hugging Face Spaces <span id="hfSpaceCount" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn btn-danger btn-sm" onclick="pauseAllHFSpaces()">⏸️ Pause All</button>
+          <button class="btn btn-success btn-sm" onclick="resumeAllHFSpaces()">▶️ Resume All</button>
+          <button class="btn btn-outline btn-sm" onclick="refreshHFSpaces()">↻ Refresh Spaces</button>
+        </div>
+        <div id="hfSpaceList" style="max-height:350px;overflow-y:auto;">
+          <div class="empty">Loading spaces...</div>
+        </div>
+      </div>
+
+      <!-- Logs -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
@@ -256,6 +291,7 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     </div>
   </div>
 </div>
+
 <div class="modal-overlay" id="shutdownModal">
   <div class="modal">
     <h3>🛑 Shutdown Server?</h3>
@@ -267,27 +303,17 @@ tr.highlight td,tr.selected td{background:rgba(91,140,255,.08)}
     </div>
   </div>
 </div>
+
 <script>
 const API=location.origin;const $=id=>document.getElementById(id);
-(function initTheme(){
-  const saved=localStorage.getItem('zcc-theme')||'dark';
-  applyTheme(saved);
-})();
-function applyTheme(theme){
-  if(theme==='system'){
-    document.documentElement.removeAttribute('data-theme');
-  }else{
-    document.documentElement.setAttribute('data-theme',theme);
-  }
-  localStorage.setItem('zcc-theme',theme);
-}
+(function initTheme(){const saved=localStorage.getItem('zcc-theme')||'dark';applyTheme(saved);})();
+function applyTheme(theme){if(theme==='system'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',theme);}localStorage.setItem('zcc-theme',theme);}
 function setTheme(theme){applyTheme(theme);$('themeMenu').classList.remove('show')}
 function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
-document.addEventListener('click',e=>{
-  const p=document.querySelector('.theme-pop');
-  if(p && !p.contains(e.target)) $('themeMenu').classList.remove('show');
-});
+document.addEventListener('click',e=>{const p=document.querySelector('.theme-pop');if(p&&!p.contains(e.target))$('themeMenu').classList.remove('show');});
 let currentMode='individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
+let allHFSpaces=[],hfPauseState=false;
+
 function setMode(m){currentMode=m;$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
 function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
@@ -306,10 +332,8 @@ async function refreshLogs(){try{const q=activeLogMeeting?`?meeting=${encodeURIC
 function selectMeetingLogs(meeting){activeLogMeeting=meeting;refreshLogs();show('Logs: '+meeting,'info')}
 function clearLogFilter(){activeLogMeeting=null;refreshLogs()}
 function renderActive(meetings){
-  allMeetings=meetings;
-  const search=($('searchMeeting').value||'').trim().toLowerCase();
-  let filtered=Object.entries(meetings);
-  if(search) filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));
+  allMeetings=meetings;const search=($('searchMeeting').value||'').trim().toLowerCase();
+  let filtered=Object.entries(meetings);if(search) filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));
   if(!filtered.length){activeListMobile.innerHTML='<div class="empty">No meetings</div>';tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr>';return}
   activeListMobile.innerHTML=filtered.map(([meeting,m])=>{
     const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
@@ -325,10 +349,8 @@ function renderActive(meetings){
       <div class="mc-bottom"><span>${startTime}</span>
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button>
       </div></div>`}).join('');
-  let idx=0;
-  tbodyActive.innerHTML=filtered.map(([meeting,m])=>{
-    idx++;
-    const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
+  let idx=0;tbodyActive.innerHTML=filtered.map(([meeting,m])=>{
+    idx++;const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
     const status=m.status||'running',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
     const sel=activeLogMeeting===meeting?'selected':'';
     return `<tr class="${sel}" style="cursor:pointer" onclick="selectMeetingLogs('${meeting}')">
@@ -349,8 +371,7 @@ function renderSchedules(schedules){
       <span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div>
       <div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div>
       <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`}).join('');
-  let idx=0;
-  tbodySchedule.innerHTML=entries.map(([sid,s])=>{
+  let idx=0;tbodySchedule.innerHTML=entries.map(([sid,s])=>{
     idx++;const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
     return `<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
       <td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td>
@@ -359,8 +380,48 @@ function renderSchedules(schedules){
       <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('');
 }
 function filterMeetings(){renderActive(allMeetings)}
-async function refresh(){try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}}
+
+// ---------- HF Wallet & Spaces ----------
+async function fetchWallet(){
+  try{const r=await fetch(API+'/api/wallet');const d=await r.json();if(d.success){$('hfBalance').textContent='$'+d.balance.toFixed(2);$('hfCredits').textContent=d.compute_remaining||'--';}else{$('hfBalance').textContent='Error';}}catch(e){$('hfBalance').textContent='🚫';}
+}
+async function fetchHFSpaces(){
+  try{const r=await fetch(API+'/api/hf/spaces');const d=await r.json();if(d.success){allHFSpaces=d.spaces;renderHFSpaces(allHFSpaces);}else{show('Spaces error: '+d.error,'err');}}catch(e){show('Spaces fetch fail','err');}
+}
+function renderHFSpaces(spaces){
+  const container=$('hfSpaceList');$('hfSpaceCount').textContent=`(${spaces.length})`;
+  if(!spaces.length){container.innerHTML='<div class="empty">No spaces found</div>';return;}
+  container.innerHTML=spaces.map(s=>{
+    const status=s.status||'unknown';
+    const statusClass=`hf-status-${status}`;
+    const statusLabel=status.charAt(0).toUpperCase()+status.slice(1);
+    return `<div class="hf-space-item">
+      <div><strong>${s.name}</strong> <span class="hf-space-status ${statusClass}">${statusLabel}</span></div>
+      <div class="hf-controls">
+        ${status!=='paused'?`<button class="btn btn-danger btn-sm" onclick="pauseHF('${s.id}')">⏸️</button>`:''}
+        ${status==='paused'?`<button class="btn btn-success btn-sm" onclick="resumeHF('${s.id}')">▶️</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function pauseHF(id){if(!confirm(`Pause ${id}?`))return;try{await fetch(API+'/api/hf/pause/'+id,{method:'POST'});show(`Paused ${id}`,'ok');refreshHFSpaces();}catch(e){show('Error','err')}}
+async function resumeHF(id){if(!confirm(`Resume ${id}?`))return;try{await fetch(API+'/api/hf/resume/'+id,{method:'POST'});show(`Resumed ${id}`,'ok');refreshHFSpaces();}catch(e){show('Error','err')}}
+async function pauseAllHFSpaces(){if(!confirm('Pause ALL HF Spaces?'))return;try{await fetch(API+'/api/hf/pause-all',{method:'POST'});show('Paused all','ok');refreshHFSpaces();}catch(e){}}
+async function resumeAllHFSpaces(){if(!confirm('Resume ALL HF Spaces?'))return;try{await fetch(API+'/api/hf/resume-all',{method:'POST'});show('Resumed all','ok');refreshHFSpaces();}catch(e){}}
+function refreshHFSpaces(){fetchHFSpaces();}
+
+// ---------- Global Pause ----------
+async function toggleGlobalPause(){
+  try{const r=await fetch(API+'/api/pause-status');const d=await r.json();if(d.paused){await fetch(API+'/api/resume',{method:'POST'});$('pauseToggleBtn').textContent='⏸️ Pause';show('Resumed','ok')}else{await fetch(API+'/api/pause',{method:'POST'});$('pauseToggleBtn').textContent='▶️ Resume';show('Paused','warn')}refresh();}catch(e){show('Toggle fail','err')}
+}
+
+// ---------- Main refresh ----------
+async function refresh(){
+  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();fetchWallet();fetchHFSpaces();show(`Refreshed • ${connected} worker(s)`,'ok')}catch(e){show(e.message||'Failed','err')}
+}
 setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
+
+// ---------- Start/Kill ----------
 async function handleStart(){
   if(!isLoggedIn) return show('Upload session JSON first','err');
   const meeting=meetingId.value.trim().replace(/\s/g,'');
@@ -395,7 +456,8 @@ async function deleteSchedule(sid){if(!confirm('Cancel?'))return;try{const r=awa
 function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdownConfirm').value='';$('shutdownConfirm').focus()}
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
 async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type yes');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Shutting down...','ok');closeShutdownModal()}}
-setInterval(refresh,5000);
+
+setInterval(refresh,8000);
 setInterval(refreshLogs,3000);
 refresh();
 </script>
