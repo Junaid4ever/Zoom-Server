@@ -516,7 +516,7 @@ function renderHFSpaces(spaces){
   $('hfRunningList').innerHTML=running.length?running.map(hfRow).join(''):'<div class="empty">None running</div>';
   $('hfPausedList').innerHTML=paused.length?paused.map(hfRow).join(''):'<div class="empty">None paused</div>';
   const master=$('hfMasterSwitch');
-  if(master && !master.disabled) master.checked = running.length>0 && paused.length===0;
+  if(master && !master.disabled) master.checked = running.length>0;
 }
 function updateSpaceName(el){
   const newName=el.innerText.trim();
