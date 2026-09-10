@@ -897,9 +897,115 @@ async def schedule_checker():
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
             save_state()
 
+def _zoom_cookie_jar(data):
+    jar = httpx.Cookies()
+    for c in data.get("cookies") or []:
+        name, val = c.get("name"), c.get("value")
+        if not name or val is None:
+            continue
+        domain = (c.get("domain") or ".zoom.us").lstrip(".")
+        path = c.get("path") or "/"
+        try:
+            jar.set(name, val, domain=domain, path=path)
+        except Exception:
+            try:
+                jar.set(name, val)
+            except Exception:
+                pass
+    return jar
+
 async def keep_session_alive():
+    """Har 15s Zoom hit karke cookies refresh / expiry badhao taaki logout na ho."""
+    urls = [
+        "https://zoom.us/",
+        "https://www.zoom.us/",
+        "https://zoom.us/profile",
+        "https://www.zoom.us/account",
+    ]
+    i = 0
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(15)
+        try:
+            if not os.path.exists("zoom_session.json"):
+                session_status.update({
+                    "logged_in": False,
+                    "message": "No session file",
+                    "last_checked": now_ist().isoformat(),
+                })
+                continue
+            with open("zoom_session.json") as f:
+                data = json.load(f)
+            cookies = data.get("cookies") or []
+            if not cookies:
+                session_status.update({
+                    "logged_in": False,
+                    "message": "Session has no cookies",
+                    "last_checked": now_ist().isoformat(),
+                })
+                continue
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            url = urls[i % len(urls)]
+            i += 1
+            async with httpx.AsyncClient(
+                timeout=20, follow_redirects=True, cookies=_zoom_cookie_jar(data), headers=headers
+            ) as client:
+                r = await client.get(url)
+            updated = False
+            now_ts = int(time.time())
+            for sc in r.cookies.jar:
+                hit = None
+                for c in cookies:
+                    if c.get("name") == sc.name:
+                        hit = c
+                        break
+                if hit:
+                    if hit.get("value") != sc.value:
+                        hit["value"] = sc.value
+                        updated = True
+                    hit["expires"] = now_ts + 14 * 86400
+                    updated = True
+                else:
+                    cookies.append({
+                        "name": sc.name,
+                        "value": sc.value,
+                        "domain": sc.domain or ".zoom.us",
+                        "path": sc.path or "/",
+                        "expires": now_ts + 14 * 86400,
+                        "httpOnly": True,
+                        "secure": True,
+                        "sameSite": "Lax",
+                    })
+                    updated = True
+            for c in cookies:
+                exp = c.get("expires") or 0
+                try:
+                    exp = int(exp)
+                except Exception:
+                    exp = 0
+                if exp < now_ts + 3 * 86400:
+                    c["expires"] = now_ts + 14 * 86400
+                    updated = True
+            if updated:
+                data["cookies"] = cookies
+                with open("zoom_session.json", "w") as f:
+                    json.dump(data, f)
+            ok = r.status_code < 400
+            session_status.update({
+                "logged_in": True if cookies else False,
+                "message": f"Session ping {r.status_code}" + (" + cookies saved" if updated else ""),
+                "last_checked": now_ist().isoformat(),
+            })
+            if i % 8 == 0:
+                add_log("-", f"🔄 Zoom session ping {r.status_code} ({url})", "ok" if ok else "err")
+        except Exception as e:
+            session_status.update({
+                "message": f"Session ping err: {str(e)[:80]}",
+                "last_checked": now_ist().isoformat(),
+            })
 
 @app.on_event("startup")
 async def startup_event():
