@@ -870,6 +870,107 @@ async def resume_all_spaces():
     except Exception as e:
         raise HTTPException(500, str(e))
 
+BOTS_PER_SPACE = 50
+
+def _list_hf_space_ids():
+    token = _hf_token()
+    if not token or HfApi is None or list_spaces is None:
+        return []
+    api = HfApi(token=token)
+    user = api.whoami()["name"]
+    return list(list_spaces(author=user, token=token)), api
+
+def _connected_free():
+    connected = [w for w in workers.values() if w.get("sid")]
+    free = sum(int(w.get("free_capacity") or 0) for w in connected)
+    cap = sum(int(w.get("max_capacity") or BOTS_PER_SPACE) for w in connected)
+    return len(connected), free, cap
+
+async def wake_spaces_for_bots(bot_count: int):
+    """Paused spaces ko itna on karo ki bot_count cover ho (50/space)."""
+    n_conn, free, cap = _connected_free()
+    if free >= bot_count:
+        return []
+    need_bots = max(0, bot_count - free)
+    need_spaces = max(1, (need_bots + BOTS_PER_SPACE - 1) // BOTS_PER_SPACE)
+    token = _hf_token()
+    if not token or HfApi is None:
+        add_log("-", "Cannot auto-wake spaces: no HF token", "err")
+        return []
+    loop = asyncio.get_event_loop()
+
+    def pick_and_resume():
+        woken = []
+        try:
+            spaces, api = _list_hf_space_ids()
+        except Exception as e:
+            add_log("-", f"HF list fail: {e}", "err")
+            return woken
+        paused = []
+        for sp in spaces:
+            sid = getattr(sp, "id", None) or str(sp)
+            try:
+                st = _normalize_status(_runtime_stage(api.get_space_runtime(sid)))
+            except Exception:
+                st = "unknown"
+            if st != "running":
+                paused.append(sid)
+        for sid in paused[:need_spaces]:
+            try:
+                api.restart_space(sid)
+                woken.append(sid)
+                _patch_cache_status(sid, "running")
+            except Exception as e:
+                add_log("-", f"Wake {sid} fail: {e}", "err")
+        return woken
+
+    woken = await loop.run_in_executor(_hf_pool, pick_and_resume)
+    if woken:
+        add_log("-", f"▶️ Auto-woke {len(woken)} space(s) for {bot_count} bots", "ok")
+    return woken
+
+async def wait_for_capacity(bot_count: int, timeout=90):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        n_conn, free, cap = _connected_free()
+        if free >= bot_count or cap >= bot_count:
+            add_log("-", f"Workers ready conn={n_conn} free={free} need={bot_count}", "ok")
+            return True
+        await asyncio.sleep(3)
+    n_conn, free, cap = _connected_free()
+    add_log("-", f"Wait timeout conn={n_conn} free={free} need={bot_count}", "err")
+    return False
+
+async def pause_spaces_later(delay_sec: int, space_ids=None):
+    await asyncio.sleep(delay_sec)
+    token = _hf_token()
+    if not token or HfApi is None:
+        return
+    loop = asyncio.get_event_loop()
+
+    def pause_them():
+        n = 0
+        try:
+            spaces, api = _list_hf_space_ids()
+            targets = space_ids
+            if not targets:
+                targets = [getattr(s, "id", None) or str(s) for s in spaces]
+            for sid in targets:
+                try:
+                    api.pause_space(sid)
+                    _patch_cache_status(sid, "paused")
+                    n += 1
+                except Exception:
+                    pass
+        except Exception as e:
+            add_log("-", f"Auto-pause fail: {e}", "err")
+            return n
+        return n
+
+    n = await loop.run_in_executor(_hf_pool, pause_them)
+    add_log("-", f"⏸️ Auto-paused {n} HF space(s) after 90 min", "ok")
+    _hf_cache["spaces"] = None
+
 async def schedule_checker():
     while True:
         await asyncio.sleep(4)
@@ -887,12 +988,16 @@ async def schedule_checker():
         for sid in to_run:
             info = scheduled_tasks.pop(sid)
             try:
+                add_log(info.get("meeting_code", "-"), "📅 Schedule due — waking spaces", "info")
+                woken = await wake_spaces_for_bots(int(info["bot_count"]))
+                await wait_for_capacity(int(info["bot_count"]), timeout=90)
                 await start_bots(StartBotRequest(
                     meeting_code=info["meeting_code"], passcode=info["passcode"],
                     bot_count=info["bot_count"], duration_minutes=info["duration_minutes"],
                     name_type=info["name_type"], custom_names=info["custom_names"],
                     join_mode=info["join_mode"],
                 ))
+                asyncio.create_task(pause_spaces_later(90 * 60, None))
             except Exception as e:
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
             save_state()
