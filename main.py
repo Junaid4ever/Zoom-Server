@@ -40,12 +40,10 @@ STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
 pause_state = False
 session_locked = False
-session_apply = {}  # worker_id -> {ok, ts, cookies}
+session_apply = {}
 SESSION_FILE = "zoom_session.json"
-GITHUB_OWNER = os.environ.get("GITHUB_OWNER", "Junaid4ever")
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "Zoom-Server")
-GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
-GITHUB_TOKEN = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+screenshot_enabled = False
+screenshot_store = deque(maxlen=40)  # {id,tag,step,ts,b64}
 
 
 def add_log(meeting, message, level="info"):
@@ -206,7 +204,8 @@ async def register_worker(sid, data):
         }
     add_log("-", f"Worker {wid} registered | max={max_cap} free={workers[wid]['free_capacity']} reserved={reserved}", "ok")
     save_state()
-    await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
+    await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap, "screenshots": screenshot_enabled}, to=sid)
+    await sio.emit("screenshot_toggle", {"enabled": screenshot_enabled}, to=sid)
     if os.path.exists(SESSION_FILE):
         try:
             with open(SESSION_FILE) as f:
@@ -321,10 +320,8 @@ async def update_session(request: Request):
     session_locked = True
     session_apply.clear()
     session_status.update({"logged_in": True, "message": "Session locked ✓", "last_checked": now_ist().isoformat()})
-    add_log("-", f"✅ Session saved ({len(data.get('cookies') or [])} cookies) — locking + pushing GitHub", "ok")
+    add_log("-", f"✅ Session saved ({len(data.get('cookies') or [])} cookies) — locked", "ok")
     save_state()
-    gh_ok, gh_msg = await push_session_github(data)
-    add_log("-", f"GitHub push: {gh_msg}", "ok" if gh_ok else "err")
     connected = 0
     for wid, info in workers.items():
         if info.get("sid"):
@@ -334,11 +331,63 @@ async def update_session(request: Request):
     return {
         "success": True,
         "locked": True,
-        "github": gh_ok,
-        "github_message": gh_msg,
         "workers_notified": connected,
         "message": "Session saved, locked, sent to workers",
     }
+
+
+@app.post("/api/logs/clear")
+async def clear_logs(meeting: str = None):
+    if meeting:
+        meeting_logs.pop(meeting, None)
+    else:
+        global_logs.clear()
+        meeting_logs.clear()
+    return {"success": True}
+
+
+@app.get("/api/screenshots")
+async def list_shots():
+    return {
+        "enabled": screenshot_enabled,
+        "items": [
+            {"id": x["id"], "tag": x["tag"], "step": x["step"], "ts": x["ts"], "data": x["b64"]}
+            for x in list(screenshot_store)[-24:]
+        ],
+    }
+
+
+@app.post("/api/screenshots/toggle")
+async def toggle_shots(request: Request):
+    global screenshot_enabled
+    body = await request.json()
+    screenshot_enabled = bool(body.get("enabled"))
+    for info in workers.values():
+        if info.get("sid"):
+            await sio.emit("screenshot_toggle", {"enabled": screenshot_enabled}, to=info["sid"])
+    add_log("-", f"Screenshots {'ON' if screenshot_enabled else 'OFF'}", "ok")
+    return {"success": True, "enabled": screenshot_enabled}
+
+
+@app.post("/api/screenshots/upload")
+async def upload_shot(request: Request):
+    if not screenshot_enabled:
+        return {"ok": False, "skipped": True}
+    body = await request.json()
+    screenshot_store.append({
+        "id": str(uuid.uuid4())[:8],
+        "tag": body.get("tag") or "",
+        "step": body.get("step") or "",
+        "ts": now_ist().strftime("%H:%M:%S"),
+        "b64": body.get("data") or "",
+    })
+    return {"ok": True}
+
+
+@app.delete("/api/screenshots")
+async def wipe_shots():
+    screenshot_store.clear()
+    return {"success": True}
 
 
 @app.post("/api/session/unlock")
@@ -407,6 +456,7 @@ async def status():
         "recent_logs": list(global_logs)[-40:],
         "pause_state": pause_state,
         "session_locked": session_locked,
+        "screenshot_enabled": screenshot_enabled,
     }
 
 
