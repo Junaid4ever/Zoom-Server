@@ -1,23 +1,17 @@
 # ============================================
-# ZOOM BOT CENTRAL – Railway FULL
-# + HF Wallet + Space Control (FIXED)
+# ZOOM BOT CENTRAL – Railway
+# (Hugging Face removed)
 # ============================================
 import os, uuid, asyncio, json, signal, random, httpx, time
-from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import socketio
 
-try:
-    from huggingface_hub import HfApi, list_spaces
-except ImportError:
-    HfApi = None
-    list_spaces = None
 try:
     import indian_names
 except Exception:
@@ -29,6 +23,7 @@ except Exception:
     _faker = None
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
 def now_ist():
     return datetime.now(IST)
 
@@ -41,11 +36,10 @@ workers, running_tasks, meeting_groups, scheduled_tasks = {}, {}, {}, {}
 session_status = {"logged_in": False, "last_checked": None, "message": "No session file", "login_in_progress": False}
 meeting_logs, global_logs = {}, deque(maxlen=400)
 meeting_used_firsts = {}
-hf_aliases = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
 pause_state = False
-_hf_cache = {"spaces": None, "timestamp": 0, "ttl": 30}
+
 
 def add_log(meeting, message, level="info"):
     ts = now_ist().strftime("%H:%M:%S")
@@ -54,6 +48,7 @@ def add_log(meeting, message, level="info"):
     if meeting and meeting != "-":
         meeting_logs.setdefault(meeting, deque(maxlen=500)).append(line)
     print(f"[{ts}] [{meeting or '-'}] {message}", flush=True)
+
 
 def save_state():
     try:
@@ -70,22 +65,15 @@ def save_state():
                 for wid, w in workers.items()
             },
             "pause_state": pause_state,
-            "hf_aliases": hf_aliases,
         }
-        if os.path.exists(STATE_FILE):
-            try:
-                oldd=json.load(open(STATE_FILE))
-                if oldd.get("hf_credits_override") is not None:
-                    data["hf_credits_override"]=oldd.get("hf_credits_override")
-            except Exception:
-                pass
         with open(STATE_FILE, "w") as f:
             json.dump(data, f)
     except Exception as e:
         print(f"save_state err: {e}", flush=True)
 
+
 def load_state():
-    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts, pause_state, hf_aliases
+    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts, pause_state
     if not os.path.exists(STATE_FILE):
         return
     try:
@@ -96,10 +84,10 @@ def load_state():
         scheduled_tasks.update(data.get("scheduled_tasks") or {})
         meeting_used_firsts.update({k: set(v) for k, v in (data.get("meeting_used_firsts") or {}).items()})
         pause_state = data.get("pause_state", False)
-        hf_aliases.update(data.get("hf_aliases") or {})
         print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)} pause={pause_state}", flush=True)
     except Exception as e:
         print(f"load_state err: {e}", flush=True)
+
 
 def _ok_first(name, used):
     if not name:
@@ -110,6 +98,7 @@ def _ok_first(name, used):
     if "katappa" in k or k.startswith("user"):
         return False
     return True
+
 
 def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str]:
     used = meeting_used_firsts.setdefault(meeting, set())
@@ -135,6 +124,7 @@ def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str
             out.append(extra)
     return out
 
+
 class StartBotRequest(BaseModel):
     meeting_code: str
     passcode: str = ""
@@ -143,6 +133,7 @@ class StartBotRequest(BaseModel):
     name_type: str = "indian"
     custom_names: Optional[List[str]] = None
     join_mode: str = "individual"
+
 
 class ScheduleRequest(BaseModel):
     meeting_code: str
@@ -154,24 +145,16 @@ class ScheduleRequest(BaseModel):
     join_mode: str = "individual"
     schedule_at: str
 
+
 class TerminateRequest(BaseModel):
     meeting_code: Optional[str] = None
     task_id: Optional[str] = None
 
-class HFSpaceAction(BaseModel):
-    space_id: str
-    action: Optional[str] = None
-
-class HFRename(BaseModel):
-    space_id: str
-    alias: str
-
-class HFBulk(BaseModel):
-    action: str  # pause | resume
 
 @sio.event
 async def connect(sid, environ):
     print(f"[SIO] Connected: {sid}", flush=True)
+
 
 @sio.event
 async def disconnect(sid):
@@ -183,6 +166,7 @@ async def disconnect(sid):
             add_log("-", f"Worker {wid} disconnected | {len(orphan)} reserved — Kill to free", "err")
             save_state()
             break
+
 
 @sio.event
 async def register_worker(sid, data):
@@ -215,6 +199,7 @@ async def register_worker(sid, data):
     save_state()
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
 
+
 @sio.event
 async def task_completed(sid, data):
     tid = data.get("task_id")
@@ -237,13 +222,16 @@ async def task_completed(sid, data):
     add_log(m or "-", f"Task {tid} completed | +{bc} capacity")
     save_state()
 
+
 @sio.event
 async def bot_log(sid, data):
     add_log(data.get("meeting_code", ""), data.get("message", ""), data.get("level", "info"))
 
+
 @app.get("/health")
 async def health():
     return {"ok": True}
+
 
 @app.get("/session")
 async def get_session():
@@ -251,12 +239,14 @@ async def get_session():
         raise HTTPException(404, "Session not found")
     return FileResponse("zoom_session.json", media_type="application/json")
 
+
 @app.get("/api/session-status")
 async def api_session_status():
     session_status["logged_in"] = os.path.exists("zoom_session.json")
     session_status["message"] = "Session file present" if session_status["logged_in"] else "No session file"
     session_status["last_checked"] = now_ist().isoformat()
     return session_status
+
 
 @app.post("/api/update-session")
 async def update_session(request: Request):
@@ -272,10 +262,12 @@ async def update_session(request: Request):
             await sio.emit("session_updated", {"message": "new session"}, to=info["sid"])
     return {"success": True, "message": "Session saved"}
 
+
 @app.get("/api/logs")
 async def get_logs(meeting: str = None, limit: int = 200):
     logs = list(meeting_logs.get(meeting, []))[-limit:] if meeting else list(global_logs)[-limit:]
     return {"logs": logs, "meeting": meeting}
+
 
 @app.get("/status")
 @app.get("/api/status")
@@ -307,8 +299,8 @@ async def status():
         "connected_workers_count": len(connected),
         "recent_logs": list(global_logs)[-40:],
         "pause_state": pause_state,
-        "hf_token_set": bool(os.environ.get("HF_TOKEN")),
     }
+
 
 @app.post("/api/start-bots")
 async def start_bots(req: StartBotRequest):
@@ -389,6 +381,7 @@ async def start_bots(req: StartBotRequest):
     save_state()
     return {"success": True, "message": f"Started {started} bots for {meeting}", "assigned": assigned, "remaining_unassigned": remaining}
 
+
 @app.post("/api/schedule")
 async def create_schedule(req: ScheduleRequest):
     try:
@@ -415,6 +408,7 @@ async def create_schedule(req: ScheduleRequest):
     save_state()
     return {"success": True, "schedule_id": sid, "message": "Scheduled successfully"}
 
+
 @app.delete("/api/schedule/{schedule_id}")
 async def delete_schedule(schedule_id: str):
     if schedule_id in scheduled_tasks:
@@ -422,6 +416,7 @@ async def delete_schedule(schedule_id: str):
         save_state()
         return {"success": True}
     raise HTTPException(404)
+
 
 @app.post("/api/terminate")
 async def terminate(req: Optional[TerminateRequest] = None):
@@ -464,6 +459,7 @@ async def terminate(req: Optional[TerminateRequest] = None):
     save_state()
     return {"success": True, "message": "All terminated"}
 
+
 @app.post("/api/shutdown")
 async def shutdown_server():
     add_log("-", "🛑 SHUTDOWN", "err")
@@ -474,6 +470,7 @@ async def shutdown_server():
     await asyncio.sleep(1.5)
     os.kill(os.getpid(), signal.SIGTERM)
     return {"success": True}
+
 
 @app.post("/api/pause")
 async def pause_all():
@@ -486,6 +483,7 @@ async def pause_all():
     save_state()
     return {"success": True, "paused": True}
 
+
 @app.post("/api/resume")
 async def resume_all():
     global pause_state
@@ -497,479 +495,11 @@ async def resume_all():
     save_state()
     return {"success": True, "paused": False}
 
+
 @app.get("/api/pause-status")
 async def pause_status():
     return {"paused": pause_state}
 
-# ---------- HF helpers ----------
-_hf_pool = ThreadPoolExecutor(max_workers=12)
-
-def _hf_token():
-    return (os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN") or "").strip()
-
-def _runtime_stage(runtime) -> str:
-    if runtime is None:
-        return "unknown"
-    if isinstance(runtime, dict):
-        return str(runtime.get("stage") or runtime.get("status") or "unknown").lower()
-    stage = getattr(runtime, "stage", None)
-    if stage is not None:
-        return str(getattr(stage, "value", stage)).lower()
-    raw = getattr(runtime, "raw", None) or {}
-    if isinstance(raw, dict):
-        return str(raw.get("stage") or raw.get("status") or "unknown").lower()
-    return "unknown"
-
-def _normalize_status(stage: str) -> str:
-    s = (stage or "unknown").lower()
-    if s in ("running", "running_building", "building"):
-        return "running"
-    if s in ("paused",):
-        return "paused"
-    if s in ("stopped", "sleeping", "sleeping_building"):
-        return "stopped"
-    if "error" in s:
-        return "stopped"
-    return s or "unknown"
-
-def _walk_credits(obj, path=""):
-    found = []
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            lk = str(k).lower()
-            p = f"{path}.{k}" if path else k
-            if isinstance(v, (int, float)) and any(x in lk for x in ("credit", "balance", "wallet", "amount", "remaining")):
-                found.append((p, float(v)))
-            elif isinstance(v, str):
-                try:
-                    if any(x in lk for x in ("credit", "balance", "wallet")):
-                        found.append((p, float(v.replace("$", "").replace(",", "").strip())))
-                except Exception:
-                    pass
-            else:
-                found.extend(_walk_credits(v, p))
-    elif isinstance(obj, list):
-        for i, v in enumerate(obj[:30]):
-            found.extend(_walk_credits(v, f"{path}[{i}]"))
-    return found
-
-def _patch_cache_status(space_id, status):
-    spaces = _hf_cache.get("spaces") or []
-    for s in spaces:
-        if s.get("id") == space_id:
-            s["status"] = status
-            s["stage"] = status
-            break
-
-def _pick_credit(hits):
-    if not hits:
-        return None, None
-    prefer = ("prepaid", "creditbalance", "creditsbalance", "currentbalance", "availablecredit", "walletbalance", "remainingcredit", "balance")
-    ranked = []
-    for path, val in hits:
-        lp = path.lower().replace("_", "")
-        if val <= 0:
-            continue
-        if any(x in lp for x in ("usage", "spent", "period", "invoice", "threshold")):
-            continue
-        score = 2 if any(x in lp for x in prefer) else 1
-        ranked.append((score, val, path))
-    if not ranked:
-        return None, None
-    ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    return ranked[0][1], ranked[0][2]
-
-@app.get("/api/wallet")
-async def get_wallet_balance():
-    token = _hf_token()
-    if not token:
-        return JSONResponse(status_code=400, content={"success": False, "error": "HF_TOKEN not set on Railway"})
-    username = None
-    plan = None
-    credits = None
-    usage = None
-    source = None
-    try:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json,text/html",
-            "User-Agent": "ZoomBotCentral/1.0",
-        }
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            r = await client.get("https://huggingface.co/api/whoami-v2", headers=headers)
-            if r.status_code != 200:
-                return JSONResponse(status_code=400, content={"success": False, "error": f"Token invalid ({r.status_code})"})
-            info = r.json()
-            username = info.get("name")
-            auth = info.get("auth") or {}
-            plan = info.get("isPro") and "pro" or (auth.get("type") or info.get("type") or "")
-            now = now_ist()
-            start = int(datetime(now.year, now.month, 1, tzinfo=IST).timestamp() * 1000)
-            nxt = (now.replace(day=28) + timedelta(days=8)).replace(day=1)
-            end = int(datetime(nxt.year, nxt.month, 1, tzinfo=IST).timestamp() * 1000)
-            urls = [
-                "https://huggingface.co/api/settings/billing",
-                "https://huggingface.co/api/settings/billing/usage",
-                f"https://huggingface.co/api/settings/billing/usage-v2?startDate={start}&endDate={end}",
-                "https://huggingface.co/api/wallet",
-                "https://huggingface.co/api/billing",
-                "https://huggingface.co/api/payments",
-                "https://huggingface.co/api/settings/billing/credits",
-                f"https://huggingface.co/api/users/{username}/overview" if username else None,
-            ]
-            all_hits = []
-            for url in [u for u in urls if u]:
-                try:
-                    resp = await client.get(url, headers=headers)
-                    if resp.status_code != 200:
-                        continue
-                    ctype = resp.headers.get("content-type", "")
-                    if "json" in ctype:
-                        data = resp.json()
-                        all_hits.extend(_walk_credits(data))
-                        val, src = _pick_credit(_walk_credits(data))
-                        if val is not None and (credits is None or val > credits):
-                            credits, source = val, url
-                        uhits = [h for h in _walk_credits(data) if "usage" in h[0].lower() or "spent" in h[0].lower()]
-                        if uhits:
-                            usage = max(x[1] for x in uhits)
-                except Exception:
-                    continue
-
-            # Billing page HTML often contains the exact "$49.75" credits figure
-            try:
-                page = await client.get("https://huggingface.co/settings/billing", headers=headers)
-                if page.status_code == 200:
-                    import re
-                    text = page.text
-                    # next.js embedded JSON
-                    for m in re.finditer(r'"(?:credits|creditBalance|prepaidCredits|currentBalance|balance)"\s*:\s*([0-9]+(?:\.[0-9]+)?)', text, re.I):
-                        val = float(m.group(1))
-                        if val > (credits or 0):
-                            credits, source = val, "billing-page-json"
-                    for m in re.finditer(r'Credits[^$]{0,80}\$([0-9]+(?:\.[0-9]+)?)', text, re.I):
-                        val = float(m.group(1))
-                        if 0.01 <= val <= 100000 and val > (credits or 0):
-                            credits, source = val, "billing-page-html"
-            except Exception:
-                pass
-
-        if credits is not None and credits >= 100 and abs(credits - int(credits)) < 1e-9:
-            as_dollars = credits / 100.0
-            if 0.5 <= as_dollars <= 50000:
-                credits, source = as_dollars, (str(source or "") + "+cents")
-        saved = None
-        try:
-            if os.path.exists(STATE_FILE):
-                saved = json.load(open(STATE_FILE)).get("hf_credits_override")
-                if saved is not None:
-                    saved = float(saved)
-        except Exception:
-            saved = None
-        if (credits is None or float(credits) == 0) and saved:
-            credits, source = saved, "override"
-        if credits is None:
-            credits = 0.0
-            source = source or "no-public-wallet-field"
-        return {
-            "success": True,
-            "username": username,
-            "credits": float(credits),
-            "usage": usage,
-            "currency": "USD",
-            "plan": str(plan or ""),
-            "source": source,
-            "token_ok": True,
-        }
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
-
-class HFCreditsOverride(BaseModel):
-    credits: float
-
-@app.post("/api/wallet/override")
-async def wallet_override(body: HFCreditsOverride):
-    data = {}
-    if os.path.exists(STATE_FILE):
-        try:
-            data = json.load(open(STATE_FILE))
-        except Exception:
-            data = {}
-    data["hf_credits_override"] = float(body.credits)
-    with open(STATE_FILE, "w") as f:
-        json.dump(data, f)
-    return {"success": True, "credits": float(body.credits)}
-
-def _space_row(space, api):
-    sid = getattr(space, "id", None) or str(space)
-    stage = "unknown"
-    runtime = getattr(space, "runtime", None)
-    if runtime is not None:
-        stage = _runtime_stage(runtime)
-    if stage == "unknown":
-        try:
-            stage = _runtime_stage(api.get_space_runtime(sid))
-        except Exception:
-            pass
-    return {
-        "id": sid,
-        "name": sid.split("/")[-1],
-        "alias": hf_aliases.get(sid) or sid.split("/")[-1],
-        "status": _normalize_status(stage),
-        "stage": stage,
-        "sdk": getattr(space, "sdk", "unknown"),
-    }
-
-@app.get("/api/hf/spaces")
-async def get_my_spaces(force_refresh: bool = False):
-    global _hf_cache
-    token = _hf_token()
-    if not token:
-        raise HTTPException(400, "HF_TOKEN not set on server (Railway Variables)")
-    if HfApi is None or list_spaces is None:
-        raise HTTPException(500, "huggingface_hub not installed")
-    now = time.time()
-    if not force_refresh and _hf_cache["spaces"] and (now - _hf_cache["timestamp"] < _hf_cache["ttl"]):
-        for s in _hf_cache["spaces"]:
-            s["alias"] = hf_aliases.get(s["id"]) or s.get("alias") or s["name"]
-        return {"success": True, "spaces": _hf_cache["spaces"], "cached": True}
-    try:
-        api = HfApi(token=token)
-        user = api.whoami()["name"]
-        spaces = list(list_spaces(author=user, token=token))
-        loop = asyncio.get_event_loop()
-        tasks = [loop.run_in_executor(_hf_pool, _space_row, s, api) for s in spaces]
-        results = await asyncio.gather(*tasks)
-        _hf_cache["spaces"] = list(results)
-        _hf_cache["timestamp"] = now
-        return {"success": True, "spaces": results, "cached": False, "username": user}
-    except Exception as e:
-        if _hf_cache["spaces"]:
-            return {"success": True, "spaces": _hf_cache["spaces"], "cached": True, "warning": str(e)}
-        raise HTTPException(500, str(e))
-
-def _do_pause_or_resume(space_id, action):
-    token = _hf_token()
-    api = HfApi(token=token)
-    action = (action or "").lower()
-    if action not in ("pause", "resume"):
-        runtime = api.get_space_runtime(space_id)
-        status = _normalize_status(_runtime_stage(runtime))
-        action = "pause" if status == "running" else "resume"
-    if action == "pause":
-        api.pause_space(space_id)
-        new_status = "paused"
-    else:
-        api.restart_space(space_id)
-        new_status = "running"
-    _patch_cache_status(space_id, new_status)
-    return new_status
-
-@app.post("/api/hf/toggle")
-async def toggle_space(body: HFSpaceAction):
-    token = _hf_token()
-    if not token:
-        raise HTTPException(400, "HF_TOKEN not set")
-    space_id = (body.space_id or "").strip()
-    if not space_id:
-        raise HTTPException(400, "space_id required")
-    try:
-        loop = asyncio.get_event_loop()
-        new_status = await loop.run_in_executor(_hf_pool, _do_pause_or_resume, space_id, body.action)
-        add_log("-", f"HF {space_id} -> {new_status}", "ok")
-        return {"success": True, "status": new_status, "message": f"{space_id} -> {new_status}"}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.post("/api/hf/rename")
-async def rename_space(body: HFRename):
-    alias = (body.alias or "").strip()
-    if not body.space_id or not alias:
-        raise HTTPException(400, "space_id and alias required")
-    hf_aliases[body.space_id] = alias
-    if _hf_cache.get("spaces"):
-        for s in _hf_cache["spaces"]:
-            if s.get("id") == body.space_id:
-                s["alias"] = alias
-    save_state()
-    return {"success": True, "alias": alias}
-
-@app.post("/api/hf/bulk")
-async def bulk_spaces(body: HFBulk):
-    token = _hf_token()
-    if not token:
-        raise HTTPException(400, "HF_TOKEN not set")
-    action = (body.action or "").lower()
-    if action not in ("pause", "resume"):
-        raise HTTPException(400, "action must be pause or resume")
-    spaces = _hf_cache.get("spaces") or []
-    if not spaces:
-        raise HTTPException(400, "No cached spaces — refresh once")
-    want = "running" if action == "pause" else "paused"
-    targets = [s["id"] for s in spaces if s.get("status") == want or (action == "resume" and s.get("status") != "running")]
-    loop = asyncio.get_event_loop()
-
-    def one(sid):
-        try:
-            return _do_pause_or_resume(sid, action)
-        except Exception:
-            return None
-
-    results = await asyncio.gather(*[loop.run_in_executor(_hf_pool, one, sid) for sid in targets])
-    count = sum(1 for r in results if r)
-    add_log("-", f"HF bulk {action}: {count}", "ok")
-    return {"success": True, "count": count, "action": action}
-
-@app.post("/api/hf/pause-all")
-async def pause_all_spaces():
-    token = _hf_token()
-    if not token:
-        raise HTTPException(400, "HF_TOKEN not set")
-    try:
-        api = HfApi(token=token)
-        user = api.whoami()["name"]
-        spaces = list(list_spaces(author=user, token=token))
-        count = 0
-        for space in spaces:
-            try:
-                runtime = api.get_space_runtime(space.id)
-                status = _normalize_status(_runtime_stage(runtime))
-                if status == "running":
-                    api.pause_space(space.id)
-                    count += 1
-            except Exception:
-                pass
-        add_log("-", f"⏸️ Paused {count} HF Spaces", "ok")
-        _hf_cache["spaces"] = None
-        return {"success": True, "paused_count": count}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.post("/api/hf/resume-all")
-async def resume_all_spaces():
-    token = _hf_token()
-    if not token:
-        raise HTTPException(400, "HF_TOKEN not set")
-    try:
-        api = HfApi(token=token)
-        user = api.whoami()["name"]
-        spaces = list(list_spaces(author=user, token=token))
-        count = 0
-        for space in spaces:
-            try:
-                runtime = api.get_space_runtime(space.id)
-                status = _normalize_status(_runtime_stage(runtime))
-                if status in ("paused", "stopped", "unknown"):
-                    api.restart_space(space.id)
-                    count += 1
-            except Exception:
-                pass
-        add_log("-", f"▶️ Resumed {count} HF Spaces", "ok")
-        _hf_cache["spaces"] = None
-        return {"success": True, "resumed_count": count}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-BOTS_PER_SPACE = 50
-
-def _list_hf_space_ids():
-    token = _hf_token()
-    if not token or HfApi is None or list_spaces is None:
-        return []
-    api = HfApi(token=token)
-    user = api.whoami()["name"]
-    return list(list_spaces(author=user, token=token)), api
-
-def _connected_free():
-    connected = [w for w in workers.values() if w.get("sid")]
-    free = sum(int(w.get("free_capacity") or 0) for w in connected)
-    cap = sum(int(w.get("max_capacity") or BOTS_PER_SPACE) for w in connected)
-    return len(connected), free, cap
-
-async def wake_spaces_for_bots(bot_count: int):
-    """Paused spaces ko itna on karo ki bot_count cover ho (50/space)."""
-    n_conn, free, cap = _connected_free()
-    if free >= bot_count:
-        return []
-    need_bots = max(0, bot_count - free)
-    need_spaces = max(1, (need_bots + BOTS_PER_SPACE - 1) // BOTS_PER_SPACE)
-    token = _hf_token()
-    if not token or HfApi is None:
-        add_log("-", "Cannot auto-wake spaces: no HF token", "err")
-        return []
-    loop = asyncio.get_event_loop()
-
-    def pick_and_resume():
-        woken = []
-        try:
-            spaces, api = _list_hf_space_ids()
-        except Exception as e:
-            add_log("-", f"HF list fail: {e}", "err")
-            return woken
-        paused = []
-        for sp in spaces:
-            sid = getattr(sp, "id", None) or str(sp)
-            try:
-                st = _normalize_status(_runtime_stage(api.get_space_runtime(sid)))
-            except Exception:
-                st = "unknown"
-            if st != "running":
-                paused.append(sid)
-        for sid in paused[:need_spaces]:
-            try:
-                api.restart_space(sid)
-                woken.append(sid)
-                _patch_cache_status(sid, "running")
-            except Exception as e:
-                add_log("-", f"Wake {sid} fail: {e}", "err")
-        return woken
-
-    woken = await loop.run_in_executor(_hf_pool, pick_and_resume)
-    if woken:
-        add_log("-", f"▶️ Auto-woke {len(woken)} space(s) for {bot_count} bots", "ok")
-    return woken
-
-async def wait_for_capacity(bot_count: int, timeout=90):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        n_conn, free, cap = _connected_free()
-        if free >= bot_count or cap >= bot_count:
-            add_log("-", f"Workers ready conn={n_conn} free={free} need={bot_count}", "ok")
-            return True
-        await asyncio.sleep(3)
-    n_conn, free, cap = _connected_free()
-    add_log("-", f"Wait timeout conn={n_conn} free={free} need={bot_count}", "err")
-    return False
-
-async def pause_spaces_later(delay_sec: int, space_ids=None):
-    await asyncio.sleep(delay_sec)
-    token = _hf_token()
-    if not token or HfApi is None:
-        return
-    loop = asyncio.get_event_loop()
-
-    def pause_them():
-        n = 0
-        try:
-            spaces, api = _list_hf_space_ids()
-            targets = space_ids
-            if not targets:
-                targets = [getattr(s, "id", None) or str(s) for s in spaces]
-            for sid in targets:
-                try:
-                    api.pause_space(sid)
-                    _patch_cache_status(sid, "paused")
-                    n += 1
-                except Exception:
-                    pass
-        except Exception as e:
-            add_log("-", f"Auto-pause fail: {e}", "err")
-            return n
-        return n
-
-    n = await loop.run_in_executor(_hf_pool, pause_them)
-    add_log("-", f"⏸️ Auto-paused {n} HF space(s) after 90 min", "ok")
-    _hf_cache["spaces"] = None
 
 async def schedule_checker():
     while True:
@@ -988,19 +518,17 @@ async def schedule_checker():
         for sid in to_run:
             info = scheduled_tasks.pop(sid)
             try:
-                add_log(info.get("meeting_code", "-"), "📅 Schedule due — waking spaces", "info")
-                woken = await wake_spaces_for_bots(int(info["bot_count"]))
-                await wait_for_capacity(int(info["bot_count"]), timeout=90)
+                add_log(info.get("meeting_code", "-"), "📅 Schedule due — starting bots", "info")
                 await start_bots(StartBotRequest(
                     meeting_code=info["meeting_code"], passcode=info["passcode"],
                     bot_count=info["bot_count"], duration_minutes=info["duration_minutes"],
                     name_type=info["name_type"], custom_names=info["custom_names"],
                     join_mode=info["join_mode"],
                 ))
-                asyncio.create_task(pause_spaces_later(90 * 60, None))
             except Exception as e:
                 add_log(info.get("meeting_code", "-"), f"Schedule fail: {e}", "err")
             save_state()
+
 
 def _zoom_cookie_jar(data):
     jar = httpx.Cookies()
@@ -1019,8 +547,8 @@ def _zoom_cookie_jar(data):
                 pass
     return jar
 
+
 async def keep_session_alive():
-    """Har 15s Zoom hit karke cookies refresh / expiry badhao taaki logout na ho."""
     urls = [
         "https://zoom.us/",
         "https://www.zoom.us/",
@@ -1112,6 +640,7 @@ async def keep_session_alive():
                 "last_checked": now_ist().isoformat(),
             })
 
+
 @app.on_event("startup")
 async def startup_event():
     load_state()
@@ -1119,15 +648,16 @@ async def startup_event():
     asyncio.create_task(keep_session_alive())
     if os.path.exists("zoom_session.json"):
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
-    tok = "SET" if _hf_token() else "MISSING"
-    add_log("-", f"✅ Server started | HF_TOKEN={tok}", "ok")
+    add_log("-", "✅ Server started", "ok")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     if os.path.exists("dashboard.html"):
         with open("dashboard.html", encoding="utf-8") as f:
             return HTMLResponse(f.read())
-    return HTMLResponse("<h1>Put dashboard.html next to server.py</h1>")
+    return HTMLResponse("<h1>Put dashboard.html next to main.py</h1>")
+
 
 if __name__ == "__main__":
     import uvicorn
