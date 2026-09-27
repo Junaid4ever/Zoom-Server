@@ -112,7 +112,12 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
       </div>
       <div id="sessionApplyDetail" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
     </div>
-    <div style="margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="unlockSession()">🔓 Unlock JSON</button></div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-outline btn-sm" onclick="unlockSession()">🔓 Unlock JSON</button>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="shotToggle" onchange="toggleShots(this.checked)"/> Screenshots
+      </label>
+    </div>
     <div id="sessionEditBox" style="display:none;margin-top:12px;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full zoom_session.json — ek baar. Saare workers yahi use karenge.</div>
       <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}'></textarea>
@@ -194,9 +199,19 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel"></span></div>
-          <button class="btn btn-outline btn-sm" onclick="clearLogFilter();refreshLogs()">All</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-outline btn-sm" onclick="clearLogFilter();refreshLogs()">All</button>
+            <button class="btn btn-danger btn-sm" onclick="clearLogs()">Clear logs</button>
+          </div>
         </div>
         <div id="logPanel" class="log-panel">Waiting for logs...</div>
+      </div>
+      <div class="card" id="shotCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="section-title" style="margin:0;">🖼 Screenshots</div>
+          <button class="btn btn-outline btn-sm" onclick="wipeShots()">Clear shots</button>
+        </div>
+        <div id="shotGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;"></div>
       </div>
     </div>
   </div>
@@ -345,7 +360,30 @@ async function deleteSchedule(id){await fetch(API+'/api/schedule/'+id,{method:'D
 function openShutdownModal(){$('shutdownModal').style.display='flex'}
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
 async function confirmShutdown(){if($('shutdownConfirm').value.trim().toLowerCase()!=='yes')return alert('type yes'); await fetch(API+'/api/shutdown',{method:'POST'}); closeShutdownModal()}
-refresh(); refreshApply(); setInterval(refresh,8000); setInterval(refreshLogs,3000); setInterval(refreshApply,2000);
+async function toggleShots(on){
+  await fetch(API+'/api/screenshots/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!!on})});
+  show('Screenshots '+(on?'ON':'OFF'),'ok');
+}
+async function loadShots(){
+  try{
+    const d=await (await fetch(API+'/api/screenshots')).json();
+    if($('shotToggle')) $('shotToggle').checked=!!d.enabled;
+    const g=$('shotGrid'); if(!g) return;
+    const items=d.items||[];
+    if(!items.length){g.innerHTML='<div class="empty">No screenshots</div>';return;}
+    g.innerHTML=items.slice().reverse().map(x=>`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--input)">
+      <img src="data:image/png;base64,${x.data}" style="width:100%;display:block;cursor:pointer" onclick="window.open(this.src)"/>
+      <div style="padding:6px;font-size:10px;color:var(--muted)">${x.ts} ${x.tag} ${x.step}</div>
+    </div>`).join('');
+  }catch(e){}
+}
+async function wipeShots(){await fetch(API+'/api/screenshots',{method:'DELETE'});loadShots()}
+async function clearLogs(){
+  await fetch(API+'/api/logs/clear',{method:'POST'});
+  refreshLogs(); show('Logs cleared','ok');
+}
+refresh(); refreshApply(); loadShots();
+setInterval(refresh,8000); setInterval(refreshLogs,3000); setInterval(refreshApply,2000); setInterval(loadShots,4000);
 </script>
 </body>
 </html>
