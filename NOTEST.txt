@@ -1,0 +1,8 @@
+
+Deploy:
+- main.py + dashboard.html + requirements.txt + Procfile  -> Railway
+- Colab: cell1 then cell2 from COLAB_CELL1.py / COLAB_CELL2.py
+
+JSON: dashboard "Update Session" once. Workers fetch /session from Railway. No HF.
+Name: worker strips login cookies (zm_aid, cred, ...) so Zoom guest name field works.
+RAM: BATCH_SIZE=4, 0.8s stagger, 3 launch retries.
