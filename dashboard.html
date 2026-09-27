@@ -102,7 +102,17 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
       <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
       <button class="btn btn-outline btn-sm" id="toggleSessionBtn" onclick="toggleSessionBox()">✏️ Update Session</button>
     </div>
-    <div id="sessionStatusLine" style="font-size:13px;color:var(--muted);">Status: <span id="sessionStatusText">Checking...</span></div>
+    <div id="sessionStatusLine" style="font-size:13px;color:var(--muted);">Status: <span id="sessionStatusText">Checking...</span> <span id="sessionLockLabel"></span></div>
+    <div style="margin-top:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
+        <span>Workers apply</span><strong id="sessionPct">0%</strong>
+      </div>
+      <div style="height:10px;background:var(--input);border:1px solid var(--border);border-radius:99px;overflow:hidden;">
+        <div id="sessionBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--primary),var(--success));transition:width .3s;"></div>
+      </div>
+      <div id="sessionApplyDetail" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+    </div>
+    <div style="margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="unlockSession()">🔓 Unlock JSON</button></div>
     <div id="sessionEditBox" style="display:none;margin-top:12px;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full zoom_session.json — ek baar. Saare workers yahi use karenge.</div>
       <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}'></textarea>
@@ -228,10 +238,36 @@ async function saveSession(){
   const raw=$('sessionJson').value.trim(); if(!raw) return show('Paste JSON','err');
   let data; try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}
   if(!data.cookies) return show('Need cookies','err');
+  show('Saving + GitHub push + workers...','info');
   const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const d=await r.json();
-  if(r.ok){show('Session saved — all workers notified','ok');cancelSessionEdit();setTimeout(refresh,500)}
-  else show(d.detail||'Failed','err');
+  if(r.ok){
+    show((d.message||'Saved')+' | GitHub: '+(d.github_message||'-'), d.github?'ok':'err');
+    cancelSessionEdit();
+    pollApply(20);
+  } else show(d.detail||'Failed','err');
+}
+async function unlockSession(){
+  if(!confirm('Unlock session JSON?')) return;
+  const r=await fetch(API+'/api/session/unlock',{method:'POST'});
+  const d=await r.json();
+  show(r.ok?'Unlocked — new JSON paste allowed':'Unlock fail','ok');
+  refreshApply();
+}
+async function refreshApply(){
+  try{
+    const d=await (await fetch(API+'/api/session-apply-status')).json();
+    $('sessionPct').textContent=(d.percent||0)+'%';
+    $('sessionBar').style.width=(d.percent||0)+'%';
+    $('sessionLockLabel').textContent=d.locked?' 🔒 LOCKED':' 🔓 unlocked';
+    const rows=Object.entries(d.workers||{}).map(([w,s])=>`${w}: ${s.ok?'✅':'⏳'} ${s.cookies||0}`);
+    $('sessionApplyDetail').textContent=d.total_workers?(d.applied+'/'+d.total_workers+' workers  '+rows.join(' | ')):'No workers connected';
+  }catch(e){}
+}
+function pollApply(n){
+  refreshApply();
+  let left=n;
+  const t=setInterval(()=>{refreshApply(); left--; if(left<=0) clearInterval(t);},1000);
 }
 function renderLogs(logs){
   const panel=$('logPanel');
@@ -309,7 +345,7 @@ async function deleteSchedule(id){await fetch(API+'/api/schedule/'+id,{method:'D
 function openShutdownModal(){$('shutdownModal').style.display='flex'}
 function closeShutdownModal(){$('shutdownModal').style.display='none'}
 async function confirmShutdown(){if($('shutdownConfirm').value.trim().toLowerCase()!=='yes')return alert('type yes'); await fetch(API+'/api/shutdown',{method:'POST'}); closeShutdownModal()}
-refresh(); setInterval(refresh,8000); setInterval(refreshLogs,3000);
+refresh(); refreshApply(); setInterval(refresh,8000); setInterval(refreshLogs,3000); setInterval(refreshApply,2000);
 </script>
 </body>
 </html>
