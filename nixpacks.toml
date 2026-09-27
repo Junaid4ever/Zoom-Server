@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python313"]
+nixPkgs = ["python312"]
 
 [phases.install]
-cmds = ["python -m venv .venv && .venv/bin/pip install -r requirements.txt"]
+cmds = ["python -m venv .venv && .venv/bin/pip install -U pip && .venv/bin/pip install -r requirements.txt"]
 
 [start]
-cmd = "uvicorn main:asgi_app --host 0.0.0.0 --port $PORT"
+cmd = ".venv/bin/uvicorn main:asgi_app --host 0.0.0.0 --port $PORT"
