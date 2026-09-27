@@ -39,6 +39,13 @@ meeting_used_firsts = {}
 STATE_FILE = "bot_state.json"
 BANNED_FIRSTS = {"katappa", "mj", "m j", "m.j"}
 pause_state = False
+session_locked = False
+session_apply = {}  # worker_id -> {ok, ts, cookies}
+SESSION_FILE = "zoom_session.json"
+GITHUB_OWNER = os.environ.get("GITHUB_OWNER", "Junaid4ever")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "Zoom-Server")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+GITHUB_TOKEN = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
 
 
 def add_log(meeting, message, level="info"):
@@ -65,6 +72,7 @@ def save_state():
                 for wid, w in workers.items()
             },
             "pause_state": pause_state,
+            "session_locked": session_locked,
         }
         with open(STATE_FILE, "w") as f:
             json.dump(data, f)
@@ -73,7 +81,7 @@ def save_state():
 
 
 def load_state():
-    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts, pause_state
+    global running_tasks, meeting_groups, scheduled_tasks, meeting_used_firsts, pause_state, session_locked
     if not os.path.exists(STATE_FILE):
         return
     try:
@@ -84,7 +92,8 @@ def load_state():
         scheduled_tasks.update(data.get("scheduled_tasks") or {})
         meeting_used_firsts.update({k: set(v) for k, v in (data.get("meeting_used_firsts") or {}).items()})
         pause_state = data.get("pause_state", False)
-        print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)} pause={pause_state}", flush=True)
+        session_locked = data.get("session_locked", False)
+        print(f"[STATE] restored meetings={len(meeting_groups)} tasks={len(running_tasks)} pause={pause_state} lock={session_locked}", flush=True)
     except Exception as e:
         print(f"load_state err: {e}", flush=True)
 
@@ -198,6 +207,13 @@ async def register_worker(sid, data):
     add_log("-", f"Worker {wid} registered | max={max_cap} free={workers[wid]['free_capacity']} reserved={reserved}", "ok")
     save_state()
     await sio.emit("registered", {"worker_id": wid, "max_capacity": max_cap}, to=sid)
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE) as f:
+                sess = json.load(f)
+            await sio.emit("session_payload", {"session": sess, "locked": session_locked}, to=sid)
+        except Exception:
+            pass
 
 
 @sio.event
@@ -228,6 +244,19 @@ async def bot_log(sid, data):
     add_log(data.get("meeting_code", ""), data.get("message", ""), data.get("level", "info"))
 
 
+@sio.event
+async def session_applied(sid, data):
+    wid = data.get("worker_id") or next((w for w, i in workers.items() if i.get("sid") == sid), None)
+    if not wid:
+        return
+    session_apply[wid] = {
+        "ok": True,
+        "ts": now_ist().isoformat(),
+        "cookies": int(data.get("cookies") or 0),
+    }
+    add_log("-", f"Session applied on {wid} ({session_apply[wid]['cookies']} cookies)", "ok")
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -235,32 +264,110 @@ async def health():
 
 @app.get("/session")
 async def get_session():
-    if not os.path.exists("zoom_session.json"):
+    if not os.path.exists(SESSION_FILE):
         raise HTTPException(404, "Session not found")
-    return FileResponse("zoom_session.json", media_type="application/json")
+    return FileResponse(SESSION_FILE, media_type="application/json")
 
 
 @app.get("/api/session-status")
 async def api_session_status():
-    session_status["logged_in"] = os.path.exists("zoom_session.json")
+    session_status["logged_in"] = os.path.exists(SESSION_FILE)
     session_status["message"] = "Session file present" if session_status["logged_in"] else "No session file"
     session_status["last_checked"] = now_ist().isoformat()
     return session_status
 
 
+async def push_session_github(data: dict):
+    if not GITHUB_TOKEN:
+        return False, "GITHUB_TOKEN not set on Railway"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    path = "zoom_session.json"
+    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{path}"
+    content = json.dumps(data, indent=2)
+    import base64
+    b64 = base64.b64encode(content.encode()).decode()
+    sha = None
+    async with httpx.AsyncClient(timeout=30) as client:
+        cur = await client.get(url, headers=headers, params={"ref": GITHUB_BRANCH})
+        if cur.status_code == 200:
+            sha = cur.json().get("sha")
+        body = {
+            "message": f"session lock {now_ist().strftime('%Y-%m-%d %H:%M:%S IST')}",
+            "content": b64,
+            "branch": GITHUB_BRANCH,
+        }
+        if sha:
+            body["sha"] = sha
+        put = await client.put(url, headers=headers, json=body)
+        if put.status_code in (200, 201):
+            return True, put.json().get("content", {}).get("html_url") or "ok"
+        return False, f"GitHub {put.status_code}: {put.text[:200]}"
+
+
 @app.post("/api/update-session")
 async def update_session(request: Request):
+    global session_locked
+    if session_locked:
+        raise HTTPException(423, "Session locked. Unlock first to replace JSON.")
     data = await request.json()
     if not isinstance(data, dict) or "cookies" not in data:
         raise HTTPException(400, "Invalid JSON")
-    with open("zoom_session.json", "w") as f:
+    with open(SESSION_FILE, "w") as f:
         json.dump(data, f, indent=2)
-    session_status.update({"logged_in": True, "message": "Session updated ✓", "last_checked": now_ist().isoformat()})
-    add_log("-", "✅ Session JSON updated", "ok")
+    session_locked = True
+    session_apply.clear()
+    session_status.update({"logged_in": True, "message": "Session locked ✓", "last_checked": now_ist().isoformat()})
+    add_log("-", f"✅ Session saved ({len(data.get('cookies') or [])} cookies) — locking + pushing GitHub", "ok")
+    save_state()
+    gh_ok, gh_msg = await push_session_github(data)
+    add_log("-", f"GitHub push: {gh_msg}", "ok" if gh_ok else "err")
+    connected = 0
     for wid, info in workers.items():
         if info.get("sid"):
-            await sio.emit("session_updated", {"message": "new session"}, to=info["sid"])
-    return {"success": True, "message": "Session saved"}
+            connected += 1
+            session_apply[wid] = {"ok": False, "ts": None, "cookies": 0}
+            await sio.emit("session_payload", {"session": data, "locked": True}, to=info["sid"])
+    return {
+        "success": True,
+        "locked": True,
+        "github": gh_ok,
+        "github_message": gh_msg,
+        "workers_notified": connected,
+        "message": "Session saved, locked, sent to workers",
+    }
+
+
+@app.post("/api/session/unlock")
+async def unlock_session():
+    global session_locked
+    session_locked = False
+    save_state()
+    add_log("-", "🔓 Session unlocked — new JSON allowed", "warn")
+    return {"success": True, "locked": False}
+
+
+@app.get("/api/session-apply-status")
+async def session_apply_status():
+    connected = [w for w, i in workers.items() if i.get("sid")]
+    total = len(connected) or 0
+    applied = sum(1 for w in connected if session_apply.get(w, {}).get("ok"))
+    percent = int(round((applied / total) * 100)) if total else (100 if os.path.exists(SESSION_FILE) else 0)
+    return {
+        "locked": session_locked,
+        "has_file": os.path.exists(SESSION_FILE),
+        "total_workers": total,
+        "applied": applied,
+        "percent": percent,
+        "github_token_set": bool(GITHUB_TOKEN),
+        "workers": {
+            w: session_apply.get(w) or {"ok": False, "ts": None, "cookies": 0}
+            for w in connected
+        },
+    }
 
 
 @app.get("/api/logs")
@@ -299,6 +406,7 @@ async def status():
         "connected_workers_count": len(connected),
         "recent_logs": list(global_logs)[-40:],
         "pause_state": pause_state,
+        "session_locked": session_locked,
     }
 
 
@@ -306,7 +414,7 @@ async def status():
 async def start_bots(req: StartBotRequest):
     if pause_state:
         raise HTTPException(503, "System is globally paused. Resume first.")
-    if not os.path.exists("zoom_session.json"):
+    if not os.path.exists(SESSION_FILE):
         raise HTTPException(400, "No session file")
     if req.bot_count < 1:
         raise HTTPException(400, "bot_count >= 1")
@@ -559,14 +667,14 @@ async def keep_session_alive():
     while True:
         await asyncio.sleep(15)
         try:
-            if not os.path.exists("zoom_session.json"):
+            if not os.path.exists(SESSION_FILE):
                 session_status.update({
                     "logged_in": False,
                     "message": "No session file",
                     "last_checked": now_ist().isoformat(),
                 })
                 continue
-            with open("zoom_session.json") as f:
+            with open(SESSION_FILE) as f:
                 data = json.load(f)
             cookies = data.get("cookies") or []
             if not cookies:
@@ -624,7 +732,7 @@ async def keep_session_alive():
                     updated = True
             if updated:
                 data["cookies"] = cookies
-                with open("zoom_session.json", "w") as f:
+                with open(SESSION_FILE, "w") as f:
                     json.dump(data, f)
             ok = r.status_code < 400
             session_status.update({
@@ -646,7 +754,7 @@ async def startup_event():
     load_state()
     asyncio.create_task(schedule_checker())
     asyncio.create_task(keep_session_alive())
-    if os.path.exists("zoom_session.json"):
+    if os.path.exists(SESSION_FILE):
         session_status.update({"logged_in": True, "message": "Session present", "last_checked": now_ist().isoformat()})
     add_log("-", "✅ Server started", "ok")
 
