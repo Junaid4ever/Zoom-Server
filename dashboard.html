@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Zoom Command Center • Control Deck</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Zoom Command Center</title>
 <style>
-
 @import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap");
 :root, :root[data-theme="night"]{
   --bg:#0b0a09; --bg2:#14110e; --surface:rgba(28,25,23,.88);
@@ -13,181 +12,72 @@
   --border2:rgba(251,191,36,.35); --text:#f8f4ee; --muted:#b8a894;
   --primary:#f59e0b; --primary2:#ea580c; --success:#34d399; --danger:#fb7185;
   --warning:#fbbf24; --cyan:#fcd34d; --shadow:0 24px 60px rgba(0,0,0,.45);
-  --radius:18px; --glow:rgba(245,158,11,.22); --accent:#f59e0b;
+  --radius:18px; --glow:rgba(245,158,11,.22);
 }
 :root[data-theme="day"]{
   --bg:#f4efe6; --bg2:#fffaf3; --surface:rgba(255,252,247,.92);
   --surface2:#fff; --input:#fff7ed; --border:rgba(120,80,20,.14);
-  --border2:rgba(217,119,6,.3); --text:#1c140c; --muted:#6b5744;
-  --primary:#c2410c; --primary2:#b45309; --success:#047857; --danger:#be123c;
-  --warning:#b45309; --cyan:#9a3412; --shadow:0 16px 40px rgba(90,50,10,.12);
-  --glow:rgba(194,65,12,.12); --accent:#c2410c;
-}
-:root[data-theme="ocean"]{
-  --bg:#06141c; --bg2:#0a1f2b; --surface:rgba(10,36,48,.88);
-  --surface2:#0d2a38; --input:#071821; --border:rgba(34,211,238,.18);
-  --border2:rgba(56,189,248,.35); --text:#e8f6ff; --muted:#8cb3c4;
-  --primary:#22d3ee; --primary2:#0284c7; --success:#2dd4bf; --danger:#fb7185;
-  --warning:#fbbf24; --cyan:#67e8f9; --shadow:0 22px 55px rgba(0,20,30,.5);
-  --glow:rgba(34,211,238,.2); --accent:#22d3ee;
-}
-:root[data-theme="forest"]{
-  --bg:#07140d; --bg2:#0c1c12; --surface:rgba(12,32,20,.9);
-  --surface2:#102418; --input:#08150e; --border:rgba(74,222,128,.18);
-  --border2:rgba(52,211,153,.35); --text:#ecfdf3; --muted:#8fbf9e;
-  --primary:#34d399; --primary2:#059669; --success:#4ade80; --danger:#fb7185;
-  --warning:#fbbf24; --cyan:#6ee7b7; --shadow:0 22px 55px rgba(0,20,10,.5);
-  --glow:rgba(52,211,153,.2); --accent:#34d399;
-}
-:root[data-theme="ember"]{
-  --bg:#1a0608; --bg2:#2a0b10; --surface:rgba(50,12,18,.9);
-  --surface2:#3a1018; --input:#140508; --border:rgba(248,113,113,.2);
-  --border2:rgba(252,165,165,.35); --text:#fff1f2; --muted:#d4a5ab;
-  --primary:#fb7185; --primary2:#e11d48; --success:#34d399; --danger:#fda4af;
-  --warning:#fdba74; --cyan:#fecdd3; --shadow:0 22px 55px rgba(40,0,10,.5);
-  --glow:rgba(244,63,94,.22); --accent:#fb7185;
+  --text:#1c140c; --muted:#6b5744; --primary:#c2410c; --primary2:#b45309;
+  --success:#047857; --danger:#be123c; --warning:#b45309; --cyan:#9a3412;
+  --shadow:0 16px 40px rgba(90,50,10,.12); --glow:rgba(194,65,12,.12);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-body{
-  min-height:100vh;padding:16px 16px 88px;color:var(--text);
-  font-family:Sora,ui-sans-serif,system-ui,sans-serif;
-  background:
-    radial-gradient(900px 420px at 0% -10%,var(--glow),transparent 60%),
-    radial-gradient(700px 380px at 100% 0%,rgba(255,255,255,.04),transparent 55%),
-    linear-gradient(165deg,var(--bg),var(--bg2));
-}
+body{min-height:100vh;padding:16px;color:var(--text);font-family:Sora,sans-serif;
+  background:radial-gradient(900px 420px at 0% -10%,var(--glow),transparent 60%),linear-gradient(165deg,var(--bg),var(--bg2))}
 .container{max-width:1440px;margin:auto}
-.header{
-  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
-  padding:12px 14px;margin-bottom:14px;border:1px solid var(--border);
-  border-radius:20px;background:var(--surface);backdrop-filter:blur(18px);box-shadow:var(--shadow);
-}
+.header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 14px;margin-bottom:14px;border:1px solid var(--border);border-radius:20px;background:var(--surface)}
 .brand{display:flex;align-items:center;gap:11px}
-.brand-mark{
-  width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:18px;
-  background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111;font-weight:800
-}
-.header h1{font-size:16px;letter-spacing:-.3px}
-.brand-sub{font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:.4px;text-transform:uppercase}
+.brand-mark{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111;font-weight:800}
+.header h1{font-size:16px}
+.brand-sub{font-size:10px;color:var(--muted);text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.usage,.session-badge,.clock{
-  border:1px solid var(--border);background:var(--input);padding:7px 10px;border-radius:999px;
-  font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace
-}
-.usage strong{color:var(--warning)}
-.session-badge{font-weight:700;font-family:Sora,sans-serif}
+.usage,.session-badge,.clock{border:1px solid var(--border);background:var(--input);padding:7px 10px;border-radius:999px;font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.session-badge{font-family:Sora,sans-serif;font-weight:700}
 .session-badge.logged-in{color:var(--success)}.session-badge.logged-out{color:var(--danger)}
 .grid{display:grid;grid-template-columns:380px 1fr;gap:14px}
-.card{
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden
-}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative}
 .card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--primary),var(--primary2))}
 .section-title{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.section-title:after{content:"";height:1px;flex:1;background:var(--border)}
 .form-group{margin-bottom:11px}
-.form-group label{display:block;font-size:10px;color:var(--muted);margin:0 0 6px 2px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-.form-group input,.form-group select,.form-group textarea,.search-row input,.modal input{
-  width:100%;padding:11px 12px;background:var(--input);border:1px solid var(--border);
-  border-radius:12px;color:var(--text);font-size:14px;outline:none
-}
-.form-group input:focus,.form-group select:focus,.form-group textarea:focus,.search-row input:focus{
-  border-color:var(--primary);box-shadow:0 0 0 3px var(--glow)
-}
+.form-group label{display:block;font-size:10px;color:var(--muted);margin:0 0 6px 2px;font-weight:700;text-transform:uppercase}
+.form-group input,.form-group select,.form-group textarea,textarea,.search-row input,.modal input{
+  width:100%;padding:11px 12px;background:var(--input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--input);padding:4px;border:1px solid var(--border);border-radius:14px;margin-bottom:12px}
 .mode-btn{padding:10px;text-align:center;border-radius:10px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
 .mode-btn.active{color:#111;background:linear-gradient(135deg,var(--primary),var(--primary2))}
 .schedule-box{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px}
-.schedule-check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
 .schedule-fields{display:none;margin-top:12px;gap:10px}
 .schedule-fields.show{display:grid;grid-template-columns:1fr 1fr}
-.btn-row{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
 .btn{padding:11px 13px;border:1px solid transparent;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:Sora,sans-serif}
 .btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111;flex:1}
 .btn-danger{background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.3);color:var(--danger)}
 .btn-success{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.28);color:var(--success)}
 .btn-sm{padding:6px 10px;font-size:11px;border-radius:9px}
 .btn-outline{background:var(--input);border-color:var(--border);color:var(--muted)}
-.mobile-only{display:block}.desktop-only{display:none}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .stat{padding:13px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
-.stat-k{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.stat-k{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase}
 .stat-v{font-size:22px;font-weight:800;margin-top:4px;font-family:"IBM Plex Mono",monospace}
-.stat-s{font-size:10px;color:var(--muted);margin-top:2px}
+.stat-s{font-size:10px;color:var(--muted)}
 .meeting-card{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:8px;cursor:pointer}
-.meeting-card.selected,.meeting-card:hover{border-color:var(--primary)}
-.mc-top{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
-.mc-id{font-weight:700;font-size:14px;word-break:break-all}
-.mc-bots{font-size:16px;font-weight:800;color:var(--warning);font-family:"IBM Plex Mono",monospace}
-.mc-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.mc-bottom{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)}
-.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
-th{text-align:left;padding:10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
-td{padding:10px 8px;border-bottom:1px solid var(--border)}
+th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
 .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700}
-.badge-slow{background:rgba(251,191,36,.12);color:var(--warning)}
-.badge-together{background:rgba(52,211,153,.12);color:var(--success)}
-.badge-indian{background:rgba(245,158,11,.12);color:var(--primary)}
-.badge-english{background:rgba(52,211,153,.12);color:var(--success)}
-.badge-custom{background:rgba(167,139,250,.15);color:#c4b5fd}
 .badge-running{background:rgba(52,211,153,.12);color:var(--success)}
-.badge-completed,.badge-paused{background:rgba(148,163,184,.12);color:var(--muted)}
-.badge-stopped{background:rgba(251,113,133,.12);color:var(--danger)}
-.countdown{font-family:"IBM Plex Mono",monospace;color:var(--warning);font-weight:700;font-size:11px}
-.search-row{display:flex;gap:8px;margin-bottom:10px}.search-row input{flex:1;min-width:0}
+.badge-together{background:rgba(52,211,153,.12);color:var(--success)}
+.badge-slow{background:rgba(251,191,36,.12);color:var(--warning)}
 .log{margin-top:12px;padding:10px 12px;background:var(--input);border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
-.log .ok{color:var(--success)}.log .err{color:var(--danger)}.log .info{color:var(--primary)}
+.log .ok{color:var(--success)}.log .err{color:var(--danger)}
 .log-panel{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:12px;max-height:300px;overflow-y:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.6}
-.log-line{margin-bottom:4px;word-break:break-word}
-.log-line .t{color:var(--muted);margin-right:8px}.log-line .m{color:var(--cyan);margin-right:6px}
-.log-line.ok{color:var(--success)}.log-line.err{color:var(--danger)}
-.empty{text-align:center;color:var(--muted);padding:22px 8px;font-size:13px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
+.empty{text-align:center;color:var(--muted);padding:22px;font-size:13px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
 .modal{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:22px;max-width:420px;width:100%}
-.theme-pop{position:relative}
-.theme-menu{display:none;position:absolute;right:0;top:42px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;min-width:170px;z-index:100}
-.theme-menu.show{display:block}
-.theme-menu button{display:block;width:100%;text-align:left;padding:9px;border:0;background:transparent;color:var(--text);border-radius:8px;cursor:pointer;font-family:Sora,sans-serif}
-.theme-menu button:hover{background:var(--input)}
-.hf-space-item{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:4px;background:var(--input);border-radius:10px;border:1px solid var(--border);font-size:13px;gap:8px}
-.hf-space-status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
-.hf-status-running{background:rgba(52,211,153,.2);color:var(--success)}
-.hf-status-paused,.hf-status-unknown{background:rgba(148,163,184,.2);color:var(--muted)}
-.hf-status-stopped{background:rgba(251,113,133,.2);color:var(--danger)}
-.hf-controls{display:flex;gap:8px;align-items:center}
-.switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;inset:0;background:#334155;border-radius:999px}
-.slider:before{content:"";position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-.switch input:checked + .slider{background:var(--success)}
-.switch input:checked + .slider:before{transform:translateX(20px)}
-.mob-nav{display:none}
-#customBox{background:var(--input)!important;border:1px solid var(--border)!important;border-radius:12px}
-#customNames{background:var(--surface2)!important;border-color:var(--border)!important;color:var(--text)!important}
-@media(min-width:1000px){.mobile-only{display:none}.desktop-only{display:block} body{padding-bottom:24px}}
-@media(max-width:999px){
-  .grid{grid-template-columns:1fr}
-  .stats{grid-template-columns:1fr 1fr}
-  .header-right .usage,.header-right .clock{display:none}
-  .mob-nav{
-    display:flex;position:fixed;left:12px;right:12px;bottom:12px;z-index:80;
-    background:var(--surface2);border:1px solid var(--border);border-radius:16px;
-    padding:6px;box-shadow:var(--shadow);gap:4px
-  }
-  .mob-nav button{flex:1;border:0;background:transparent;color:var(--muted);padding:10px 6px;border-radius:12px;font-weight:700;font-size:11px;font-family:Sora,sans-serif}
-  .mob-nav button.on{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111}
-}
-@media(max-width:767px){
-  body{padding:10px 10px 86px}
-  .card{padding:13px}
-  .stat-v{font-size:18px}
-  .form-row,.schedule-fields.show{grid-template-columns:1fr}
-  .btn{padding:12px}
-}
-
+.search-row{display:flex;gap:8px;margin-bottom:10px}.search-row input{flex:1}
+@media(max-width:999px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -195,29 +85,18 @@ td{padding:10px 8px;border-bottom:1px solid var(--border)}
   <div class="header">
     <div class="brand">
       <div class="brand-mark">⚡</div>
-      <div>
-        <h1>Zoom Command Center</h1>
-        <div class="brand-sub">Operations • Capacity • Live Control</div>
-      </div>
+      <div><h1>Zoom Command Center</h1><div class="brand-sub">Operations • Capacity • Live Control</div></div>
     </div>
     <div class="header-right">
       <div id="sessionBadge" class="session-badge logged-out">Checking...</div>
       <div class="usage">CAP <strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
       <span id="liveTime" class="clock"></span>
       <button class="btn btn-outline btn-sm" onclick="refresh()">↻ Refresh</button>
-      <div class="theme-pop">
-        <button class="btn btn-outline btn-sm" onclick="toggleThemeMenu()">◐ Theme</button>
-        <div id="themeMenu" class="theme-menu">
-          <button onclick="setTheme('night')">🌙 Night</button>
-          <button onclick="setTheme('day')">☀️ Day</button>
-          <button onclick="setTheme('ocean')">🌊 Ocean</button>
-          <button onclick="setTheme('forest')">🌿 Forest</button>
-          <button onclick="setTheme('ember')">🔥 Ember</button>
-        </div>
-      </div>
+      <button class="btn btn-outline btn-sm" onclick="setTheme(document.documentElement.getAttribute('data-theme')==='night'?'day':'night')">◐ Theme</button>
       <button class="btn btn-danger btn-sm" onclick="openShutdownModal()">🛑 Shutdown</button>
     </div>
   </div>
+
   <div class="card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
@@ -225,20 +104,21 @@ td{padding:10px 8px;border-bottom:1px solid var(--border)}
     </div>
     <div id="sessionStatusLine" style="font-size:13px;color:var(--muted);">Status: <span id="sessionStatusText">Checking...</span></div>
     <div id="sessionEditBox" style="display:none;margin-top:12px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full <b>zoom_session.json</b> content</div>
-      <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}' style="width:100%;padding:12px;background:#0f172a;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full zoom_session.json — ek baar. Saare workers yahi use karenge.</div>
+      <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}'></textarea>
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
         <button class="btn btn-outline" onclick="cancelSessionEdit()">Cancel</button>
       </div>
     </div>
   </div>
+
   <div class="stats">
-    <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">currently allocated</div></div>
-    <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live sessions</div></div>
-    <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">command center</div></div>
-    <div class="stat" style="cursor:pointer" title="Click to set credits if API returns 0" onclick="manualHfCredits()"><div class="stat-k">💰 HF Credits</div><div class="stat-v" id="hfBalance">--</div><div class="stat-s"><span id="hfCredits">--</span></div></div>
+    <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">allocated</div></div>
+    <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live</div></div>
+    <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">workers</div></div>
   </div>
+
   <div class="grid">
     <div class="card">
       <div class="section-title">🚀 Launch / Schedule</div>
@@ -246,11 +126,11 @@ td{padding:10px 8px;border-bottom:1px solid var(--border)}
         <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
         <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
       </div>
-      <form id="launchForm" onsubmit="handleStart(); return false;">
-        <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="98695209590" inputmode="numeric"/></div>
-        <div class="form-group"><label>Passcode (optional — use 0 if passcode is 0)</label><input id="passcode" placeholder="Leave blank if none"/></div>
+      <form onsubmit="handleStart();return false;">
+        <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="98695209590"/></div>
+        <div class="form-group"><label>Passcode</label><input id="passcode" placeholder="blank if none"/></div>
         <div class="form-row">
-          <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="20" min="1" max="500" oninput="updCount()"/></div>
+          <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/></div>
           <div class="form-group"><label>Name Type</label>
             <select id="nameType" onchange="toggleCustom()">
               <option value="indian">🇮🇳 Indian</option>
@@ -259,23 +139,16 @@ td{padding:10px 8px;border-bottom:1px solid var(--border)}
             </select>
           </div>
         </div>
-        <div id="customBox" style="display:none;margin-top:12px;padding:14px;background:#0f172a;border:1px solid var(--border);border-radius:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <label style="font-size:13px;font-weight:600;color:#93c5fd;">✏️ Custom Names</label>
-            <span style="font-size:11px;color:var(--muted);">One name per line</span>
-          </div>
-          <textarea id="customNames" rows="6" placeholder="Rahul Sharma&#10;Priya Verma&#10;..." style="width:100%;padding:12px;background:#111827;border:1px solid #334155;border-radius:10px;color:var(--text);font-size:13px;font-family:ui-monospace,monospace;resize:vertical;line-height:1.5;"></textarea>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;">
-            <div style="color:var(--muted);">Names: <strong id="nameCount" style="color:#e2e8f0;">0</strong> | Need: <strong id="needCount" style="color:#e2e8f0;">20</strong> <span id="nameStatus"></span></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('customNames').value='';updCount();">Clear</button>
-          </div>
+        <div id="customBox" style="display:none;margin-bottom:12px;">
+          <textarea id="customNames" rows="5" placeholder="One name per line"></textarea>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Names: <b id="nameCount">0</b> Need: <b id="needCount">10</b></div>
         </div>
         <div class="form-group"><label>Duration (minutes)</label><input type="number" id="duration" value="120" min="1"/></div>
         <div class="schedule-box">
-          <label class="schedule-check"><input type="checkbox" id="enableSchedule" onchange="toggleSchedule()"/> Enable Scheduling</label>
+          <label><input type="checkbox" id="enableSchedule" onchange="toggleSchedule()"/> Enable Scheduling</label>
           <div class="schedule-fields" id="scheduleFields">
             <div class="form-group" style="margin:0"><label>Date</label><input type="date" id="scheduleDate"/></div>
-            <div class="form-group" style="margin:0"><label>Time (IST)</label><input type="time" id="scheduleTime"/></div>
+            <div class="form-group" style="margin:0"><label>Time IST</label><input type="time" id="scheduleTime"/></div>
           </div>
         </div>
         <div class="btn-row">
@@ -284,354 +157,159 @@ td{padding:10px 8px;border-bottom:1px solid var(--border)}
           <button type="button" class="btn btn-outline" id="pauseToggleBtn" onclick="toggleGlobalPause()">⏸️ Pause</button>
         </div>
       </form>
-      <div id="msg" class="log">Ready • IST • Press Enter to start</div>
+      <div id="msg" class="log">Ready</div>
     </div>
+
     <div style="display:flex;flex-direction:column;gap:16px;">
       <div class="card">
-        <div class="section-title">🟢 Meetings <span style="font-weight:400;font-size:12px;color:var(--muted)">(click for logs)</span></div>
+        <div class="section-title">🟢 Meetings</div>
         <div class="search-row">
           <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()"/>
           <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
         </div>
-        <div id="activeListMobile" class="mobile-only"><div class="empty">No meetings</div></div>
-        <div class="desktop-only table-wrap">
+        <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Status</th><th>Started</th><th>Mode</th><th></th></tr></thead>
-            <tbody id="tbodyActive"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr></tbody>
+            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Status</th><th></th></tr></thead>
+            <tbody id="tbodyActive"><tr><td colspan="5" class="empty">No meetings</td></tr></tbody>
           </table>
         </div>
       </div>
       <div class="card">
         <div class="section-title">📅 Scheduled</div>
-        <div id="scheduleListMobile" class="mobile-only"><div class="empty">No scheduled</div></div>
-        <div class="desktop-only table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>When</th><th>Countdown</th><th>Mode</th><th></th></tr></thead>
-            <tbody id="tbodySchedule"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-title" style="cursor:pointer;margin-bottom:8px;" onclick="toggleHfPanel()">🤗 Hugging Face Spaces <span id="hfSpaceCount" style="font-weight:400;color:var(--muted);font-size:12px;"></span>
-          <span id="hfCollapseHint" style="margin-left:auto;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;">▸ expand</span>
-        </div>
-        <div id="hfPanelBody" style="display:none;">
-        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:12px;font-weight:800;color:var(--muted);">ALL</span>
-            <label class="switch" title="OFF = pause all, ON = resume all">
-              <input type="checkbox" id="hfMasterSwitch" onchange="bulkHFToggle(this)">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();refreshHFSpaces()">↻ Refresh</button>
-        </div>
-        <div style="font-size:11px;font-weight:800;color:var(--success);margin:8px 0 6px;">RUNNING</div>
-        <div id="hfRunningList"><div class="empty">None running</div></div>
-        <div style="font-size:11px;font-weight:800;color:var(--muted);margin:14px 0 6px;">PAUSED / STOPPED</div>
-        <div id="hfPausedList"><div class="empty">None paused</div></div>
-        </div>
+        <table>
+          <thead><tr><th>Meeting</th><th>Bots</th><th>When</th><th></th></tr></thead>
+          <tbody id="tbodySchedule"><tr><td colspan="4" class="empty">No scheduled</td></tr></tbody>
+        </table>
       </div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel" style="font-weight:400;color:var(--muted);font-size:12px;"></span></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-outline btn-sm" onclick="clearLogFilter()">All</button>
-            <button class="btn btn-outline btn-sm" onclick="refreshLogs()">↻</button>
-          </div>
+          <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel"></span></div>
+          <button class="btn btn-outline btn-sm" onclick="clearLogFilter();refreshLogs()">All</button>
         </div>
-        <div id="logPanel" class="log-panel"><div style="color:var(--muted)">Waiting for logs...</div></div>
+        <div id="logPanel" class="log-panel">Waiting for logs...</div>
       </div>
     </div>
   </div>
 </div>
+
 <div class="modal-overlay" id="shutdownModal">
   <div class="modal">
-    <h3>🛑 Shutdown Server?</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Type <b>yes</b> to confirm.</p>
-    <input type="text" id="shutdownConfirm" placeholder="Type yes"/>
+    <h3>Shutdown?</h3>
+    <p style="font-size:13px;color:var(--muted);margin:8px 0">Type <b>yes</b></p>
+    <input type="text" id="shutdownConfirm"/>
     <div style="display:flex;gap:10px;margin-top:8px;">
       <button class="btn btn-danger" style="flex:1" onclick="confirmShutdown()">Shutdown</button>
       <button class="btn btn-outline" onclick="closeShutdownModal()">Cancel</button>
     </div>
   </div>
 </div>
+
 <script>
-const API=location.origin;const $=id=>document.getElementById(id);
-(function initTheme(){const saved=localStorage.getItem('zcc-theme')||'night';applyTheme(saved);})();
-setTimeout(()=>setMode(localStorage.getItem('zcc-join-mode')||'individual'),0);
-function applyTheme(theme){const t=theme==='dark'?'night':theme==='light'?'day':theme;document.documentElement.setAttribute('data-theme',t);localStorage.setItem('zcc-theme',theme);}
-function setTheme(theme){applyTheme(theme);$('themeMenu').classList.remove('show')}
-function toggleThemeMenu(){$('themeMenu').classList.toggle('show')}
-document.addEventListener('click',e=>{const p=document.querySelector('.theme-pop');if(p&&!p.contains(e.target))$('themeMenu').classList.remove('show');});
-let currentMode=localStorage.getItem('zcc-join-mode')||'individual',allMeetings={},allSchedules={},isLoggedIn=false,activeLogMeeting=null;
-let allHFSpaces=[];
+const API=location.origin;
+const $=id=>document.getElementById(id);
+document.documentElement.setAttribute('data-theme', localStorage.getItem('zcc-theme')||'night');
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('zcc-theme',t)}
+let currentMode=localStorage.getItem('zcc-join-mode')||'individual';
+let allMeetings={}, allSchedules={}, isLoggedIn=false, activeLogMeeting=null;
 function setMode(m){currentMode=m;localStorage.setItem('zcc-join-mode',m);$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
+setMode(currentMode);
 function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
-function show(m,t='info'){const c=t==='ok'?'ok':t==='err'?'err':'info';msg.innerHTML=`<span class="${c}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
+function show(m,t='info'){msg.innerHTML=`<span class="${t==='ok'?'ok':t==='err'?'err':''}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
 function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
-function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b;const st=$('nameStatus');if(nameType.value!=='custom'){st.innerHTML='';return}st.innerHTML=n.length>=b?' <span style="color:#10b981">✅ Ready</span>':` <span style="color:#ef4444">❌ ${b-n.length} more</span>`}
+function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b}
 customNames.addEventListener('input',updCount);
-function updateClock(){liveTime.textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'}
-setInterval(updateClock,1000);updateClock();
-function formatCountdown(iso){try{const t=new Date(iso),n=new Date();let d=Math.floor((t-n)/1000);if(d<=0)return'Triggering...';const h=Math.floor(d/3600),m=Math.floor((d%3600)/60),s=d%60;return h>0?`${h}h ${m}m ${s}s`:`${m}m ${s}s`}catch{return'-'}}
-function toggleSessionBox(){const b=$('sessionEditBox'),btn=$('toggleSessionBtn');if(b.style.display==='none'){b.style.display='block';btn.textContent='✕ Close'}else{b.style.display='none';btn.textContent='✏️ Update Session'}}
-function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value=''}
-function updateSessionUI(s){const badge=$('sessionBadge'),st=$('sessionStatusText');isLoggedIn=!!s.logged_in;if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st){st.textContent=s.message||'Session active';st.style.color='#34d399'}}else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st){st.textContent=s.message||'No session';st.style.color='#fca5a5'}}}
-async function saveSession(){const raw=$('sessionJson').value.trim();if(!raw)return show('Paste session JSON','err');let data;try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}if(!data.cookies)return show('Must contain cookies','err');try{show('Saving...','info');const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();if(r.ok){show('✅ Session saved!','ok');$('sessionEditBox').style.display='none';$('toggleSessionBtn').textContent='✏️ Update Session';$('sessionJson').value='';if($('sessionStatusText')){$('sessionStatusText').textContent='Session updated ✓';$('sessionStatusText').style.color='#34d399'}setTimeout(refresh,600)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
-function renderLogs(logs){const panel=$('logPanel');if(!logs||!logs.length){panel.innerHTML='<div style="color:var(--muted)">No logs yet</div>';return}panel.innerHTML=logs.map(l=>{const cls=l.level==='ok'?'ok':l.level==='err'?'err':'info';return `<div class="log-line ${cls}"><span class="t">${l.time}</span><span class="m">[${l.meeting}]</span>${l.message}</div>`}).join('');panel.scrollTop=panel.scrollHeight}
-async function refreshLogs(){try{const q=activeLogMeeting?`?meeting=${encodeURIComponent(activeLogMeeting)}&limit=150`:'?limit=120';const r=await fetch(API+'/api/logs'+q);const d=await r.json();renderLogs(d.logs||[]);$('logFilterLabel').textContent=activeLogMeeting?'• '+activeLogMeeting:'• All'}catch(e){}}
-function selectMeetingLogs(meeting){activeLogMeeting=meeting;refreshLogs();show('Logs: '+meeting,'info')}
-function clearLogFilter(){activeLogMeeting=null;refreshLogs()}
-function renderActive(meetings){
-  allMeetings=meetings;const search=($('searchMeeting').value||'').trim().toLowerCase();
-  let filtered=Object.entries(meetings);if(search) filtered=filtered.filter(([m])=>m.toLowerCase().includes(search));
-  if(!filtered.length){activeListMobile.innerHTML='<div class="empty">No meetings</div>';tbodyActive.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No meetings</td></tr>';return}
-  activeListMobile.innerHTML=filtered.map(([meeting,m])=>{
-    const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
-    const status=m.status||'running',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
-    const sel=activeLogMeeting===meeting?'selected':'';
-    return `<div class="meeting-card ${sel}" onclick="selectMeetingLogs('${meeting}')">
-      <div class="mc-top"><div class="mc-id">${meeting}</div><div class="mc-bots">${done}/${total}</div></div>
-      <div class="mc-meta">
-        <span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span>
-        <span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span>
-        <span class="badge badge-${type}">${type}</span>
-      </div>
-      <div class="mc-bottom"><span>${startTime}</span>
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button>
-      </div></div>`}).join('');
-  let idx=0;tbodyActive.innerHTML=filtered.map(([meeting,m])=>{
-    idx++;const total=m.total_bots||0,done=m.completed_bots||0,type=m.name_type||'indian',mode=m.join_mode||'individual';
-    const status=m.status||'running',startTime=m.started_at?new Date(m.started_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'}):'-';
-    const sel=activeLogMeeting===meeting?'selected':'';
-    return `<tr class="${sel}" style="cursor:pointer" onclick="selectMeetingLogs('${meeting}')">
-      <td>${idx}</td><td style="font-weight:600;color:#93c5fd">${meeting}</td>
-      <td><strong style="color:#fbbf24">${done}/${total}</strong></td>
-      <td><span class="badge ${status==='completed'?'badge-completed':'badge-running'}">${status==='completed'?'Completed':'In Meeting'}</span></td>
-      <td>${startTime}</td>
-      <td><span class="badge ${mode==='together'?'badge-together':'badge-slow'}">${mode==='together'?'Together':'Slow'}</span></td>
-      <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button></td></tr>`}).join('');
+setInterval(()=>{$('liveTime').textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'},1000);
+function toggleSessionBox(){const b=$('sessionEditBox');b.style.display=b.style.display==='none'?'block':'none'}
+function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('sessionJson').value=''}
+function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge'),st=$('sessionStatusText');
+  if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
+  else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st)st.textContent=s.message||'No session'}}
+async function saveSession(){
+  const raw=$('sessionJson').value.trim(); if(!raw) return show('Paste JSON','err');
+  let data; try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}
+  if(!data.cookies) return show('Need cookies','err');
+  const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json();
+  if(r.ok){show('Session saved — all workers notified','ok');cancelSessionEdit();setTimeout(refresh,500)}
+  else show(d.detail||'Failed','err');
 }
-function renderSchedules(schedules){
-  allSchedules=schedules;const entries=Object.entries(schedules);
-  if(!entries.length){scheduleListMobile.innerHTML='<div class="empty">No scheduled</div>';tbodySchedule.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No scheduled</td></tr>';return}
-  scheduleListMobile.innerHTML=entries.map(([sid,s])=>{
-    const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `<div class="meeting-card"><div class="mc-top"><div class="mc-id">${s.meeting_code}</div><div class="mc-bots">${s.bot_count}</div></div>
-      <div class="mc-meta"><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span>
-      <span class="badge badge-${s.name_type||'indian'}">${s.name_type||'indian'}</span></div>
-      <div class="mc-bottom"><div><div>${when}</div><div class="countdown" id="cd-m-${sid}">${formatCountdown(s.schedule_at)}</div></div>
-      <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></div></div>`}).join('');
-  let idx=0;tbodySchedule.innerHTML=entries.map(([sid,s])=>{
-    idx++;const when=new Date(s.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
-    return `<tr><td>${idx}</td><td style="font-weight:600;color:#93c5fd">${s.meeting_code}</td>
-      <td><strong style="color:#fbbf24">${s.bot_count}</strong></td><td>${when}</td>
-      <td class="countdown" id="cd-d-${sid}">${formatCountdown(s.schedule_at)}</td>
-      <td><span class="badge ${s.join_mode==='together'?'badge-together':'badge-slow'}">${s.join_mode==='together'?'Together':'Slow'}</span></td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${sid}')">Cancel</button></td></tr>`}).join('');
+function renderLogs(logs){
+  const panel=$('logPanel');
+  if(!logs||!logs.length){panel.textContent='No logs';return}
+  panel.innerHTML=logs.map(l=>`<div class="${l.level||''}"><span style="color:var(--muted)">${l.time}</span> [${l.meeting}] ${l.message}</div>`).join('');
+  panel.scrollTop=panel.scrollHeight;
+}
+async function refreshLogs(){
+  const q=activeLogMeeting?`?meeting=${encodeURIComponent(activeLogMeeting)}&limit=150`:'?limit=120';
+  const r=await fetch(API+'/api/logs'+q); const d=await r.json();
+  renderLogs(d.logs||[]); $('logFilterLabel').textContent=activeLogMeeting?' • '+activeLogMeeting:'';
+}
+function selectMeetingLogs(m){activeLogMeeting=m;refreshLogs()}
+function clearLogFilter(){activeLogMeeting=null}
+function renderActive(meetings){
+  allMeetings=meetings;
+  const search=($('searchMeeting').value||'').trim().toLowerCase();
+  let rows=Object.entries(meetings); if(search) rows=rows.filter(([m])=>m.includes(search));
+  if(!rows.length){$('tbodyActive').innerHTML='<tr><td colspan="5" class="empty">No meetings</td></tr>';return}
+  $('tbodyActive').innerHTML=rows.map(([meeting,m],i)=>`<tr onclick="selectMeetingLogs('${meeting}')">
+    <td>${i+1}</td><td>${meeting}</td><td>${m.completed_bots||0}/${m.total_bots||0}</td>
+    <td><span class="badge badge-running">${m.status||'running'}</span></td>
+    <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button></td></tr>`).join('');
+}
+function renderSchedules(s){
+  allSchedules=s; const e=Object.entries(s);
+  if(!e.length){$('tbodySchedule').innerHTML='<tr><td colspan="4" class="empty">No scheduled</td></tr>';return}
+  $('tbodySchedule').innerHTML=e.map(([id,x])=>`<tr><td>${x.meeting_code}</td><td>${x.bot_count}</td>
+    <td>${new Date(x.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${id}')">Cancel</button></td></tr>`).join('');
 }
 function filterMeetings(){renderActive(allMeetings)}
-async function manualHfCredits(){
-  const cur=$('hfBalance').textContent.replace(/[^0-9.]/g,'');
-  const v=prompt('HF Credits (USD) — billing page se exact number daalo', cur||'49.75');
-  if(v==null||v==='')return;
-  const n=parseFloat(v);
-  if(isNaN(n))return show('Invalid number','err');
-  try{
-    const r=await fetch(API+'/api/wallet/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credits:n})});
-    const d=await r.json();
-    if(r.ok){$('hfBalance').textContent='$'+n.toFixed(2);show('Credits set $'+n.toFixed(2),'ok');}
-    else show(d.detail||'override fail','err');
-  }catch(e){show(e.message,'err')}
-}
-async function fetchWallet(){
-  try{
-    const r=await fetch(API+'/api/wallet');
-    const d=await r.json();
-    if(d.success){
-      const val=Number(d.credits||0);
-      $('hfBalance').textContent='$'+val.toFixed(2);
-      const extra=d.usage!=null?(' • used $'+Number(d.usage).toFixed(2)):'';
-      $('hfCredits').textContent=(d.username||'HF')+extra+' • USD';
-    }else{
-      $('hfBalance').textContent='No token';
-      $('hfCredits').textContent=d.error||d.detail||'Set HF_TOKEN on Railway';
-    }
-  }catch(e){
-    $('hfBalance').textContent='🚫';
-    $('hfCredits').textContent='wallet fetch fail';
-  }
-}
-async function fetchHFSpaces(force){
-  try{
-    const q=force?'?force_refresh=true':'';
-    const r=await fetch(API+'/api/hf/spaces'+q);
-    const d=await r.json();
-    if(d.success){allHFSpaces=d.spaces||[];renderHFSpaces(allHFSpaces);}
-    else{show('Spaces error: '+(d.detail||d.error||JSON.stringify(d)),'err');}
-  }catch(e){show('Spaces fetch fail','err');}
-}
-function getSpaceDisplay(s){return s.alias||localStorage.getItem('hf_name_'+s.id)||s.name||s.id.split('/').pop();}
-function toggleHfPanel(){
-  const body=$('hfPanelBody'), hint=$('hfCollapseHint');
-  const open=body.style.display!=='none';
-  body.style.display=open?'none':'block';
-  hint.textContent=open?'▸ expand':'▾ collapse';
-}
-function hfRow(s){
-  const status=s.status||'unknown';
-  const displayName=getSpaceDisplay(s);
-  const on=status==='running'?'checked':'';
-  const safeId=String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  return `<div class="hf-space-item">
-      <div style="min-width:0;flex:1;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <strong id="hfName-${s.id.replace(/[^a-zA-Z0-9_-]/g,'_')}" data-spaceid="${s.id}"
-            style="cursor:default;">${displayName}</strong>
-          <button class="btn btn-outline btn-sm" title="Rename" onclick="event.stopPropagation();startRename(this,'${safeId}')">✏️</button>
-        </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px;">${s.id}</div>
-      </div>
-      <div class="hf-controls">
-        <span class="hf-space-status hf-status-${status}">${status}</span>
-        <label class="switch" title="ON running / OFF paused">
-          <input type="checkbox" ${on} onchange="toggleHFSpace('${safeId}', this, '${status==='running'?'pause':'resume'}')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>`;
-}
-function startRename(btn, spaceId){
-  const name=prompt('New display name for this space:', getSpaceDisplay(allHFSpaces.find(x=>x.id===spaceId)||{id:spaceId}));
-  if(!name) return;
-  const el={innerText:name, dataset:{spaceid:spaceId}};
-  updateSpaceName(el);
-  renderHFSpaces(allHFSpaces);
-}
-function renderHFSpaces(spaces){
-  $('hfSpaceCount').textContent=`(${spaces.length})`;
-  const running=spaces.filter(s=>s.status==='running');
-  const paused=spaces.filter(s=>s.status!=='running');
-  $('hfRunningList').innerHTML=running.length?running.map(hfRow).join(''):'<div class="empty">None running</div>';
-  $('hfPausedList').innerHTML=paused.length?paused.map(hfRow).join(''):'<div class="empty">None paused</div>';
-  const master=$('hfMasterSwitch');
-  if(master && !master.disabled) master.checked = running.length>0;
-}
-function updateSpaceName(el){
-  const newName=el.innerText.trim();
-  const spaceId=el.dataset.spaceid;
-  if(!newName) return;
-  localStorage.setItem('hf_name_'+spaceId,newName);
-  const s=allHFSpaces.find(x=>x.id===spaceId); if(s) s.alias=newName;
-  fetch(API+'/api/hf/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({space_id:spaceId,alias:newName})});
-}
-async function toggleHFSpace(id,el,action){
-  const s=allHFSpaces.find(x=>x.id===id);
-  const prev=s?s.status:'unknown';
-  if(s){s.status=el.checked?'running':'paused'; renderHFSpaces(allHFSpaces);}
-  try{
-    const r=await fetch(API+'/api/hf/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({space_id:id,action:action||(el.checked?'resume':'pause')})});
-    const data=await r.json();
-    if(r.ok && data.success){
-      if(s) s.status=data.status||s.status;
-      show(data.message||id,'ok');
-      renderHFSpaces(allHFSpaces);
-    }else{
-      if(s) s.status=prev;
-      renderHFSpaces(allHFSpaces);
-      show('Error: '+(data.detail||data.error||data.message||JSON.stringify(data)),'err');
-    }
-  }catch(e){
-    if(s) s.status=prev;
-    renderHFSpaces(allHFSpaces);
-    show('Error: '+e.message,'err');
-  }
-}
-async function bulkHFToggle(el){
-  const action=el.checked?'resume':'pause';
-  el.disabled=true;
-  allHFSpaces.forEach(s=>s.status=action==='resume'?'running':'paused');
-  renderHFSpaces(allHFSpaces);
-  try{
-    const r=await fetch(API+'/api/hf/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
-    const d=await r.json();
-    if(r.ok) show(`Bulk ${action}: ${d.count||0}`,'ok');
-    else {show(d.detail||'Bulk fail','err'); fetchHFSpaces(true);}
-  }catch(e){show(e.message,'err'); fetchHFSpaces(true);}
-  finally{el.disabled=false;}
-}
-function refreshHFSpaces(){fetchHFSpaces(true);}
 async function toggleGlobalPause(){
-  try{const r=await fetch(API+'/api/pause-status');const d=await r.json();if(d.paused){await fetch(API+'/api/resume',{method:'POST'});$('pauseToggleBtn').textContent='⏸️ Pause';show('Resumed','ok')}else{await fetch(API+'/api/pause',{method:'POST'});$('pauseToggleBtn').textContent='▶️ Resume';show('Paused','warn')}refresh();}catch(e){show('Toggle fail','err')}
+  const d=await (await fetch(API+'/api/pause-status')).json();
+  if(d.paused){await fetch(API+'/api/resume',{method:'POST'});$('pauseToggleBtn').textContent='⏸️ Pause'}
+  else {await fetch(API+'/api/pause',{method:'POST'});$('pauseToggleBtn').textContent='▶️ Resume'}
+  refresh();
 }
 async function refresh(){
-  try{const r=await fetch(API+'/status');const d=await r.json();if(d.session)updateSessionUI(d.session);const connected=d.connected_workers_count||Object.keys(d.workers||{}).length;const active=(d.total_capacity||0)-(d.total_free_capacity||0);totalCap.textContent=active;totalCapMax.textContent=d.total_capacity||0;$('dashActive').textContent=active;$('dashMeetings').textContent=Object.keys(d.meetings||{}).length;$('dashMode').textContent=connected?`${connected} Worker${connected>1?'s':''}`:'Standby';renderActive(d.meetings||{});renderSchedules(d.schedules||{});if(d.pause_state!==undefined){$('pauseToggleBtn').textContent=d.pause_state?'▶️ Resume':'⏸️ Pause';}if(d.recent_logs&&!activeLogMeeting)renderLogs(d.recent_logs);else await refreshLogs();show(`Refreshed • ${connected} worker(s)`+(d.hf_token_set===false?' • HF_TOKEN missing':''), d.hf_token_set===false?'err':'ok')}catch(e){show(e.message||'Failed','err')}
+  try{
+    const d=await (await fetch(API+'/status')).json();
+    if(d.session) updateSessionUI(d.session);
+    const connected=d.connected_workers_count||0;
+    const active=(d.total_capacity||0)-(d.total_free_capacity||0);
+    totalCap.textContent=active; totalCapMax.textContent=d.total_capacity||0;
+    dashActive.textContent=active; dashMeetings.textContent=Object.keys(d.meetings||{}).length;
+    dashMode.textContent=connected?connected+' Worker':'Standby';
+    renderActive(d.meetings||{}); renderSchedules(d.schedules||{});
+    if(d.pause_state) $('pauseToggleBtn').textContent='▶️ Resume';
+    if(d.recent_logs&&!activeLogMeeting) renderLogs(d.recent_logs); else await refreshLogs();
+    show('Refreshed • '+connected+' worker(s)','ok');
+  }catch(e){show(e.message,'err')}
 }
-setInterval(fetchWallet,15000); setInterval(()=>fetchHFSpaces(false),60000);
-setInterval(()=>{Object.keys(allSchedules).forEach(sid=>{const t=formatCountdown(allSchedules[sid].schedule_at);const e1=document.getElementById('cd-m-'+sid),e2=document.getElementById('cd-d-'+sid);if(e1)e1.textContent=t;if(e2)e2.textContent=t})},1000);
 async function handleStart(){
-  if(!isLoggedIn) return show('Upload session JSON first','err');
+  if(!isLoggedIn) return show('Pehle session JSON save karo','err');
   const meeting=meetingId.value.trim().replace(/\s/g,'');
-  const pass=passcode.value;
-  const bots=parseInt(botCount.value)||10,dur=parseInt(duration.value)||120,type=nameType.value;
+  const bots=parseInt(botCount.value)||10, dur=parseInt(duration.value)||120, type=nameType.value;
   let custom=null;
-  if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);if(custom.length<bots)return show('Need more custom names','err')}
-  if(!meeting) return show('Meeting ID required','err');
-  const isSchedule=$('enableSchedule').checked;
-  if(isSchedule){
-    const date=$('scheduleDate').value,time=$('scheduleTime').value;
-    if(!date||!time) return show('Select date & time','err');
-    try{show('Scheduling...','info');
-      const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});
-      const d=await r.json();
-      if(r.ok){show(d.message||'Scheduled!','ok');$('enableSchedule').checked=false;toggleSchedule();setTimeout(refresh,500)}
-      else show(d.detail||'Failed','err');
-    }catch(e){show(e.message,'err')}
-  }else{
-    try{show(`Starting ${bots} bots...`,'info');
-      const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:pass,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});
-      const d=await r.json();
-      if(r.ok){show(d.message||'Started!','ok');setTimeout(refresh,500)}
-      else show(d.detail||'Failed','err');
-    }catch(e){show(e.message,'err')}
-  }
-}
-async function killMeeting(meeting){if(!confirm(`Kill ${meeting}?`))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})});const d=await r.json();if(r.ok){show(d.message||'Killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
-async function killBySearch(){const meeting=$('searchMeeting').value.trim().replace(/\s/g,'');if(!meeting)return show('Enter Meeting ID','err');await killMeeting(meeting)}
-async function killAll(){if(!confirm('Kill ALL?'))return;try{const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const d=await r.json();if(r.ok){show('All killed','ok');setTimeout(refresh,500)}else show(d.detail||'Failed','err')}catch(e){show(e.message,'err')}}
-async function deleteSchedule(sid){if(!confirm('Cancel?'))return;try{const r=await fetch(API+'/api/schedule/'+sid,{method:'DELETE'});if(r.ok){show('Cancelled','ok');setTimeout(refresh,400)}else show('Failed','err')}catch(e){show(e.message,'err')}}
-function openShutdownModal(){$('shutdownModal').style.display='flex';$('shutdownConfirm').value='';$('shutdownConfirm').focus()}
-function closeShutdownModal(){$('shutdownModal').style.display='none'}
-async function confirmShutdown(){const val=$('shutdownConfirm').value.trim().toLowerCase();if(val!=='yes'){alert('Type yes');return}try{show('Shutting down...','info');await fetch(API+'/api/shutdown',{method:'POST'});show('Shutdown sent','ok');closeShutdownModal()}catch(e){show('Shutting down...','ok');closeShutdownModal()}}
-refresh();
-fetchWallet();
-fetchHFSpaces();
-setInterval(refresh,8000);
-setInterval(refreshLogs,3000);
-
-function mobTab(which){
-  const launch=document.querySelector('.grid > .card');
-  const right=document.querySelector('.grid > div[style], .grid > div:last-child');
-  document.querySelectorAll('.mob-nav button').forEach(b=>b.classList.remove('on'));
-  if(which==='launch'){
-    $('tabLaunch').classList.add('on');
-    if(launch) launch.style.display='block';
-    if(right) right.style.display='none';
+  if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean); if(custom.length<bots) return show('Need more names','err')}
+  if(!meeting) return show('Meeting ID','err');
+  if($('enableSchedule').checked){
+    const date=$('scheduleDate').value,time=$('scheduleTime').value; if(!date||!time) return show('date/time','err');
+    const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:passcode.value,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});
+    const d=await r.json(); show(r.ok?(d.message||'Scheduled'): (d.detail||'fail'), r.ok?'ok':'err');
   } else {
-    $(which==='hf'?'tabHf':'tabLive').classList.add('on');
-    if(launch) launch.style.display='none';
-    if(right) right.style.display='flex';
-    if(which==='hf'){
-      const p=$('hfPanelBody'); if(p) p.style.display='block';
-      const h=$('hfCollapseHint'); if(h) h.textContent='▾ collapse';
-    }
+    const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:passcode.value,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});
+    const d=await r.json(); show(r.ok?(d.message||'Started'):(d.detail||'fail'), r.ok?'ok':'err');
   }
+  setTimeout(refresh,600);
 }
-if(window.matchMedia('(max-width:999px)').matches){
-  setTimeout(()=>mobTab('launch'),50);
-}
-
+async function killMeeting(meeting){if(!confirm('Kill '+meeting+'?'))return; const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})}); show((await r.json()).message||'Killed', r.ok?'ok':'err'); setTimeout(refresh,400)}
+async function killBySearch(){const m=$('searchMeeting').value.trim().replace(/\s/g,''); if(m) await killMeeting(m)}
+async function killAll(){if(!confirm('Kill ALL?'))return; await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); refresh()}
+async function deleteSchedule(id){await fetch(API+'/api/schedule/'+id,{method:'DELETE'}); refresh()}
+function openShutdownModal(){$('shutdownModal').style.display='flex'}
+function closeShutdownModal(){$('shutdownModal').style.display='none'}
+async function confirmShutdown(){if($('shutdownConfirm').value.trim().toLowerCase()!=='yes')return alert('type yes'); await fetch(API+'/api/shutdown',{method:'POST'}); closeShutdownModal()}
+refresh(); setInterval(refresh,8000); setInterval(refreshLogs,3000);
 </script>
 </body>
 </html>
