@@ -114,9 +114,19 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn btn-outline btn-sm" onclick="unlockSession()">🔓 Unlock JSON</button>
+      <button class="btn btn-outline btn-sm" onclick="toggleBackupBox()">💾 Backup JSON</button>
+      <button class="btn btn-success btn-sm" onclick="loadBackup()">♻️ Use Backup</button>
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
         <input type="checkbox" id="shotToggle" onchange="toggleShots(this.checked)"/> Screenshots
       </label>
+    </div>
+    <div id="backupBox" style="display:none;margin-top:12px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste backup zoom_session.json. Agar active session na ho to yahi use hoga.</div>
+      <textarea id="backupJson" rows="6" placeholder='{"cookies":[...]}'></textarea>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-success" onclick="saveBackup()" style="flex:1;">💾 Save Backup</button>
+        <button class="btn btn-outline" onclick="toggleBackupBox()">Cancel</button>
+      </div>
     </div>
     <div id="sessionEditBox" style="display:none;margin-top:12px;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full zoom_session.json — ek baar. Saare workers yahi use karenge.</div>
@@ -245,7 +255,23 @@ function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block
 function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b}
 customNames.addEventListener('input',updCount);
 setInterval(()=>{$('liveTime').textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'},1000);
-function toggleSessionBox(){const b=$('sessionEditBox');b.style.display=b.style.display==='none'?'block':'none'}
+function toggleBackupBox(){const b=$('backupBox');b.style.display=b.style.display==='none'?'block':'none'}
+async function saveBackup(){
+  const raw=$('backupJson').value.trim(); if(!raw) return show('Paste backup JSON','err');
+  let data; try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}
+  if(!data.cookies) return show('Need cookies','err');
+  const r=await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json();
+  show(r.ok?'Backup saved':'Backup fail', r.ok?'ok':'err');
+  if(r.ok) $('backupBox').style.display='none';
+}
+async function loadBackup(){
+  if(!confirm('Load backup as active session?')) return;
+  const r=await fetch(API+'/api/load-backup',{method:'POST'});
+  const d=await r.json();
+  show(r.ok?'Backup loaded as active':'No backup or fail', r.ok?'ok':'err');
+  setTimeout(refresh,400);
+}
 function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('sessionJson').value=''}
 function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge'),st=$('sessionStatusText');
   if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
