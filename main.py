@@ -556,7 +556,9 @@ async def start_bots(req: StartBotRequest):
     for wid, info in sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True):
         if remaining <= 0:
             break
-        free = int(info.get("free_capacity", 0))
+        max_cap = int(info.get("max_capacity", 30))
+        reserved = sum(t.get("bot_count", 0) for t in running_tasks.values() if t.get("worker_id") == wid)
+        free = max(0, max_cap - reserved)
         if free <= 0:
             continue
         give = min(free, remaining)
