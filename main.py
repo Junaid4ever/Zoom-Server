@@ -22,6 +22,12 @@ try:
 except Exception:
     _faker = None
 
+# Optional GitHub sync (set on Railway Variables if you want session push)
+GITHUB_TOKEN = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+GITHUB_OWNER = os.environ.get("GITHUB_OWNER", "Junaid4ever")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "Zoom-Server")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+
 IST = timezone(timedelta(hours=5, minutes=30))
 
 def now_ist():
@@ -42,6 +48,7 @@ pause_state = False
 session_locked = False
 session_apply = {}
 SESSION_FILE = "zoom_session.json"
+BACKUP_FILE = "zoom_session_backup.json"
 screenshot_enabled = False
 screenshot_store = deque(maxlen=40)  # {id,tag,step,ts,b64}
 
@@ -107,26 +114,31 @@ def _ok_first(name, used):
     return True
 
 
-def allocate_unique_firsts(meeting: str, count: int, name_type: str) -> List[str]:
+def allocate_unique_names(meeting: str, count: int, name_type: str) -> List[str]:
+    """Return full display names (First Last) for indian/generation, first-only only for english fallback."""
     used = meeting_used_firsts.setdefault(meeting, set())
     out = []
     tries = 0
-    while len(out) < count and tries < count * 50:
+    while len(out) < count and tries < count * 40:
         tries += 1
         if name_type == "english" and _faker:
-            first = _faker.first_name()
+            n = f"{_faker.first_name()} {_faker.last_name()}"
         elif indian_names:
-            gender = random.choice(["male", "female", None])
-            first = indian_names.get_first_name(gender=gender) if gender else indian_names.get_first_name()
+            try:
+                first = indian_names.get_first_name()
+                last = indian_names.get_last_name()
+                n = f"{first} {last}".strip()
+            except Exception:
+                n = random.choice(["Aarav Sharma", "Priya Verma", "Rohan Patel"])
         else:
-            first = random.choice(["Aarav", "Priya", "Rohan", "Ananya", "Diya", "Arjun", "Kavya", "Ishaan", "Navya", "Kabir"])
-        first = str(first).strip().split()[0]
-        if _ok_first(first, used):
-            used.add(first.lower())
-            out.append(first)
+            n = random.choice(["Aarav Sharma", "Priya Verma", "Rohan Patel", "Ananya Gupta"])
+        key = n.lower()
+        if key not in used and "katappa" not in key and not key.startswith("user"):
+            used.add(key)
+            out.append(n)
     while len(out) < count:
-        extra = ("Aarav" if name_type != "english" else "Alex") + random.choice(["esh", "ansh", "yan", "ika", "vi", "en"])
-        if _ok_first(extra, used):
+        extra = f"Aarav{random.randint(10,99)} Sharma"
+        if extra.lower() not in used:
             used.add(extra.lower())
             out.append(extra)
     return out
@@ -317,6 +329,12 @@ async def update_session(request: Request):
         raise HTTPException(400, "Invalid JSON")
     with open(SESSION_FILE, "w") as f:
         json.dump(data, f, indent=2)
+    # Also save as backup
+    try:
+        with open(BACKUP_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
     session_locked = True
     session_apply.clear()
     session_status.update({"logged_in": True, "message": "Session locked ✓", "last_checked": now_ist().isoformat()})
@@ -334,6 +352,49 @@ async def update_session(request: Request):
         "workers_notified": connected,
         "message": "Session saved, locked, sent to workers",
     }
+
+@app.post("/api/backup-session")
+async def save_backup(request: Request):
+    data = await request.json()
+    if not isinstance(data, dict) or "cookies" not in data:
+        raise HTTPException(400, "Invalid JSON")
+    with open(BACKUP_FILE, "w") as f:
+        json.dump(data, f)
+    add_log("-", f"💾 Backup session saved ({len(data.get('cookies') or [])} cookies)", "ok")
+    return {"success": True, "message": "Backup saved"}
+
+@app.post("/api/load-backup")
+async def load_backup():
+    if not os.path.exists(BACKUP_FILE):
+        raise HTTPException(404, "No backup file")
+    with open(BACKUP_FILE) as f:
+        data = json.load(f)
+    if not data.get("cookies"):
+        raise HTTPException(400, "Backup has no cookies")
+    with open(SESSION_FILE, "w") as f:
+        json.dump(data, f)
+    global session_locked
+    session_locked = True
+    session_status.update({"logged_in": True, "message": "Loaded from backup", "last_checked": now_ist().isoformat()})
+    add_log("-", "♻️ Loaded session from backup", "ok")
+    save_state()
+    # Notify workers
+    for wid, info in workers.items():
+        if info.get("sid"):
+            await sio.emit("session_payload", {"session": data, "locked": True}, to=info["sid"])
+    return {"success": True, "message": "Backup loaded as active session"}
+
+@app.get("/api/backup-status")
+async def backup_status():
+    has = os.path.exists(BACKUP_FILE)
+    n = 0
+    if has:
+        try:
+            with open(BACKUP_FILE) as f:
+                n = len(json.load(f).get("cookies") or [])
+        except Exception:
+            n = 0
+    return {"has_backup": has, "cookies": n}
 
 
 @app.post("/api/logs/clear")
@@ -486,10 +547,10 @@ async def start_bots(req: StartBotRequest):
             used_local.add(key)
             firsts.append(str(raw).strip())
         if len(firsts) < req.bot_count:
-            firsts.extend(allocate_unique_firsts(meeting, req.bot_count - len(firsts), "indian"))
+            firsts.extend(allocate_unique_names(meeting, req.bot_count - len(firsts), "indian"))
         all_firsts = firsts[:req.bot_count]
     else:
-        all_firsts = allocate_unique_firsts(meeting, req.bot_count, name_type)
+        all_firsts = allocate_unique_names(meeting, req.bot_count, name_type)
     offset = 0
     connected = {w: i for w, i in workers.items() if i.get("sid")}
     for wid, info in sorted(connected.items(), key=lambda x: x[1].get("free_capacity", 0), reverse=True):
@@ -712,11 +773,23 @@ async def keep_session_alive():
         "https://www.zoom.us/",
         "https://zoom.us/profile",
         "https://www.zoom.us/account",
+        "https://app.zoom.us/",
     ]
     i = 0
     while True:
-        await asyncio.sleep(15)
+        await asyncio.sleep(60)  # every 1 minute
         try:
+            # If main session missing, try to restore from backup
+            if not os.path.exists(SESSION_FILE) and os.path.exists(BACKUP_FILE):
+                try:
+                    with open(BACKUP_FILE) as f:
+                        data = json.load(f)
+                    if data.get("cookies"):
+                        with open(SESSION_FILE, "w") as f:
+                            json.dump(data, f)
+                        add_log("-", "♻️ Restored session from backup", "ok")
+                except Exception:
+                    pass
             if not os.path.exists(SESSION_FILE):
                 session_status.update({
                     "logged_in": False,
@@ -742,7 +815,7 @@ async def keep_session_alive():
             url = urls[i % len(urls)]
             i += 1
             async with httpx.AsyncClient(
-                timeout=20, follow_redirects=True, cookies=_zoom_cookie_jar(data), headers=headers
+                timeout=25, follow_redirects=True, cookies=_zoom_cookie_jar(data), headers=headers
             ) as client:
                 r = await client.get(url)
             updated = False
@@ -774,7 +847,7 @@ async def keep_session_alive():
             for c in cookies:
                 exp = c.get("expires") or 0
                 try:
-                    exp = int(exp)
+                    exp = int(float(exp))
                 except Exception:
                     exp = 0
                 if exp < now_ts + 3 * 86400:
@@ -784,14 +857,20 @@ async def keep_session_alive():
                 data["cookies"] = cookies
                 with open(SESSION_FILE, "w") as f:
                     json.dump(data, f)
+                # Also keep backup in sync
+                try:
+                    with open(BACKUP_FILE, "w") as f:
+                        json.dump(data, f)
+                except Exception:
+                    pass
             ok = r.status_code < 400
             session_status.update({
                 "logged_in": True if cookies else False,
                 "message": f"Session ping {r.status_code}" + (" + cookies saved" if updated else ""),
                 "last_checked": now_ist().isoformat(),
             })
-            if i % 8 == 0:
-                add_log("-", f"🔄 Zoom session ping {r.status_code} ({url})", "ok" if ok else "err")
+            if i % 4 == 0:
+                add_log("-", f"🔄 Session keepalive {r.status_code} ({url})", "ok" if ok else "err")
         except Exception as e:
             session_status.update({
                 "message": f"Session ping err: {str(e)[:80]}",
