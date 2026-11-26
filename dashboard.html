@@ -1,533 +1,214 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="night" data-color="amber">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Zoom Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap");
-:root, :root[data-theme="night"]{
-  --bg:#0b0a09; --bg2:#14110e; --surface:rgba(28,25,23,.88);
-  --surface2:#1c1917; --input:#0f0d0c; --border:rgba(245,158,11,.16);
-  --border2:rgba(251,191,36,.35); --text:#f8f4ee; --muted:#b8a894;
-  --primary:#f59e0b; --primary2:#ea580c; --success:#34d399; --danger:#fb7185;
-  --warning:#fbbf24; --cyan:#fcd34d; --shadow:0 24px 60px rgba(0,0,0,.45);
-  --radius:18px; --glow:rgba(245,158,11,.22);
+:root {
+  --bg:#0b0a09;--bg2:#14110e;--surface:#1c1917;
+  --surface2:#211c18;--input:#100e0c;
+  --border:rgba(245,158,11,.16);
+  --text:#f8f4ee;--muted:#b8a894;
+  --primary:#f59e0b;--secondary:#ea580c;
+  --success:#34d399;--danger:#fb7185;
+  --warning:#fbbf24;--glow:rgba(245,158,11,.16);
+  --shadow:0 20px 55px rgba(0,0,0,.3);
 }
-:root[data-theme="day"]{
-  --bg:#f4efe6; --bg2:#fffaf3; --surface:rgba(255,252,247,.92);
-  --surface2:#fff; --input:#fff7ed; --border:rgba(120,80,20,.14);
-  --text:#1c140c; --muted:#6b5744; --primary:#c2410c; --primary2:#b45309;
-  --success:#047857; --danger:#be123c; --warning:#b45309; --cyan:#9a3412;
-  --shadow:0 16px 40px rgba(90,50,10,.12); --glow:rgba(194,65,12,.12);
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{min-height:100vh;padding:16px;color:var(--text);font-family:Sora,sans-serif;
-  background:radial-gradient(900px 420px at 0% -10%,var(--glow),transparent 60%),linear-gradient(165deg,var(--bg),var(--bg2))}
-.container{max-width:1440px;margin:auto}
-.header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
-  padding:12px 14px;margin-bottom:14px;border:1px solid var(--border);border-radius:20px;background:var(--surface)}
-.brand{display:flex;align-items:center;gap:11px}
-.brand-mark{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111;font-weight:800}
-.header h1{font-size:16px}
-.brand-sub{font-size:10px;color:var(--muted);text-transform:uppercase}
-.header-right{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.usage,.session-badge,.clock{border:1px solid var(--border);background:var(--input);padding:7px 10px;border-radius:999px;font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
-.session-badge{font-family:Sora,sans-serif;font-weight:700}
-.session-badge.logged-in{color:var(--success)}.session-badge.logged-out{color:var(--danger)}
-.grid{display:grid;grid-template-columns:380px 1fr;gap:14px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative}
-.card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--primary),var(--primary2))}
-.section-title{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.form-group{margin-bottom:11px}
-.form-group label{display:block;font-size:10px;color:var(--muted);margin:0 0 6px 2px;font-weight:700;text-transform:uppercase}
-.form-group input,.form-group select,.form-group textarea,textarea,.search-row input,.modal input{
-  width:100%;padding:11px 12px;background:var(--input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--input);padding:4px;border:1px solid var(--border);border-radius:14px;margin-bottom:12px}
-.mode-btn{padding:10px;text-align:center;border-radius:10px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
-.mode-btn.active{color:#111;background:linear-gradient(135deg,var(--primary),var(--primary2))}
-.schedule-box{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px}
-.schedule-fields{display:none;margin-top:12px;gap:10px}
-.schedule-fields.show{display:grid;grid-template-columns:1fr 1fr}
-.btn-row{display:flex;gap:8px;flex-wrap:wrap}
-.btn{padding:11px 13px;border:1px solid transparent;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:Sora,sans-serif}
-.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#111;flex:1}
-.btn-danger{background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.3);color:var(--danger)}
-.btn-success{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.28);color:var(--success)}
-.btn-sm{padding:6px 10px;font-size:11px;border-radius:9px}
-.btn-outline{background:var(--input);border-color:var(--border);color:var(--muted)}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.stat{padding:13px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
-.stat-k{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase}
-.stat-v{font-size:22px;font-weight:800;margin-top:4px;font-family:"IBM Plex Mono",monospace}
-.stat-s{font-size:10px;color:var(--muted)}
-.meeting-card{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:8px;cursor:pointer}
-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
-th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
-.badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700}
-.badge-running{background:rgba(52,211,153,.12);color:var(--success)}
-.badge-together{background:rgba(52,211,153,.12);color:var(--success)}
-.badge-slow{background:rgba(251,191,36,.12);color:var(--warning)}
-.log{margin-top:12px;padding:10px 12px;background:var(--input);border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
-.log .ok{color:var(--success)}.log .err{color:var(--danger)}
-.log-panel{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:12px;max-height:300px;overflow-y:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.6}
-.empty{text-align:center;color:var(--muted);padding:22px;font-size:13px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
-.modal{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:22px;max-width:420px;width:100%}
-.search-row{display:flex;gap:8px;margin-bottom:10px}.search-row input{flex:1}
-@media(max-width:999px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+html[data-color="blue"]{--primary:#38bdf8;--secondary:#2563eb;--border:rgba(56,189,248,.2);--glow:rgba(56,189,248,.16)}
+html[data-color="purple"]{--primary:#c084fc;--secondary:#7c3aed;--border:rgba(192,132,252,.2);--glow:rgba(192,132,252,.16)}
+html[data-color="emerald"]{--primary:#34d399;--secondary:#059669;--border:rgba(52,211,153,.2);--glow:rgba(52,211,153,.16)}
+html[data-color="red"]{--primary:#fb7185;--secondary:#dc2626;--border:rgba(251,113,133,.2);--glow:rgba(251,113,133,.16)}
+html[data-color="cyan"]{--primary:#22d3ee;--secondary:#0891b2;--border:rgba(34,211,238,.2);--glow:rgba(34,211,238,.16)}
+html[data-color="pink"]{--primary:#f472b6;--secondary:#db2777;--border:rgba(244,114,182,.2);--glow:rgba(244,114,182,.16)}
+html[data-theme="day"]{--bg:#f4efe6;--bg2:#fffaf3;--surface:#fffdf9;--surface2:#fff;--input:#fff7ed;--text:#1c140c;--muted:#76634f;--shadow:0 15px 40px rgba(90,50,10,.1)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;padding:18px;color:var(--text);font-family:Sora,sans-serif;background:radial-gradient(850px 400px at 0% 0%,var(--glow),transparent 65%),linear-gradient(155deg,var(--bg),var(--bg2))}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.container{max-width:1450px;margin:auto}
+.header{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding:15px 18px;border:1px solid var(--border);border-radius:20px;background:var(--surface);margin-bottom:17px;box-shadow:var(--shadow)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:23px;font-weight:800;color:#111;background:linear-gradient(135deg,var(--primary),var(--secondary))}
+.brand h1{font-size:17px;font-weight:800}
+.subtitle{font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:4px}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.status{padding:9px 12px;border-radius:30px;border:1px solid var(--border);font-size:11px;color:var(--success);background:var(--input)}
+.icon-btn{width:39px;height:39px;border:1px solid var(--border);border-radius:12px;background:var(--input);color:var(--text);font-size:17px;display:grid;place-items:center}
+.btn{border:1px solid var(--border);border-radius:11px;padding:10px 14px;background:var(--input);color:var(--text);font-size:12px;font-weight:700}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#111;border:0}
+.btn-sm{padding:7px 10px;font-size:11px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:17px}
+.stat,.card{background:var(--surface);border:1px solid var(--border);border-radius:17px;box-shadow:var(--shadow)}
+.stat{padding:17px;position:relative;overflow:hidden}
+.stat-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase}
+.stat-value{font-size:27px;font-weight:800;margin:9px 0 4px;font-family:"IBM Plex Mono",monospace}
+.stat-sub{font-size:10px;color:var(--muted)}
+.main-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:15px}
+.card{padding:17px;margin-bottom:15px}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.7px;font-weight:800;margin-bottom:15px;display:flex;align-items:center;justify-content:space-between}
+.progress-bg{height:10px;background:var(--input);border-radius:20px;overflow:hidden;border:1px solid var(--border)}
+.progress-fill{height:100%;width:0%;border-radius:20px;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width .4s}
+.progress-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:7px}
+.info-line{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-size:12px}
+.info-line:last-child{border:0}
+.muted{color:var(--muted)}
+.badge{padding:5px 9px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(52,211,153,.12);color:var(--success)}
+.badge-warning{background:rgba(251,191,36,.12);color:var(--warning)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;padding:11px 9px;border-bottom:1px solid var(--border)}
+td{padding:12px 9px;border-bottom:1px solid var(--border)}
+.search{width:100%;padding:11px 12px;background:var(--input);border:1px solid var(--border);border-radius:11px;color:var(--text);margin-bottom:12px;font-size:12px}
+.log-panel{background:var(--input);border:1px solid var(--border);border-radius:12px;padding:13px;max-height:270px;overflow:auto;font:11px/1.8 "IBM Plex Mono",monospace;color:var(--muted)}
+.empty{text-align:center;padding:25px;color:var(--muted)}
+.overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);backdrop-filter:blur(7px);align-items:center;justify-content:center;padding:18px}
+.modal{width:100%;max-width:540px;max-height:85vh;overflow:auto;padding:22px;border:1px solid var(--border);border-radius:20px;background:var(--surface2);box-shadow:0 25px 80px rgba(0,0,0,.5)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.modal-head h2{font-size:16px}
+.close{border:0;background:var(--input);color:var(--text);border-radius:9px;width:33px;height:33px;font-size:18px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:7px;text-transform:uppercase}
+.field input{width:100%;padding:12px;background:var(--input);border:1px solid var(--border);border-radius:11px;color:var(--text)}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.theme-list{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.theme-option{background:var(--input);border:1px solid var(--border);border-radius:12px;padding:12px 6px;text-align:center;color:var(--text);font-size:10px;font-weight:700}
+.theme-option.active{border:2px solid var(--primary)}
+.swatch{width:26px;height:26px;border-radius:50%;margin:0 auto 7px}
+.space-list{margin-top:13px;max-height:280px;overflow:auto}
+.space-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 8px;border-bottom:1px solid var(--border);font-size:12px}
+/* Toggle switch */
+.toggle{position:relative;width:46px;height:24px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:#333;border-radius:24px;cursor:pointer;transition:.25s}
+.toggle .slider:before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.25s}
+.toggle input:checked+.slider{background:var(--success)}
+.toggle input:checked+.slider:before{transform:translateX(22px)}
+.bulk-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:8px}
+@media(max-width:900px){.main-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="header">
-    <div class="brand">
-      <div class="brand-mark">⚡</div>
-      <div><h1>Zoom Command Center</h1><div class="brand-sub">Operations • Capacity • Live Control</div></div>
-    </div>
-    <div class="header-right">
-      <div id="sessionBadge" class="session-badge logged-out">Checking...</div>
-      <div class="usage">CAP <strong id="totalCap">0</strong>/<strong id="totalCapMax">0</strong></div>
-      <span id="liveTime" class="clock"></span>
-      <button class="btn btn-outline btn-sm" onclick="refresh()">↻ Refresh</button>
-      <button class="btn btn-outline btn-sm" onclick="setTheme(document.documentElement.getAttribute('data-theme')==='night'?'day':'night')">◐ Theme</button>
-      <button class="btn btn-danger btn-sm" onclick="openShutdownModal()">🛑 Shutdown</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div class="section-title" style="margin:0;">🔑 Zoom Session</div>
-      <button class="btn btn-outline btn-sm" id="toggleSessionBtn" onclick="toggleSessionBox()">✏️ Update Session</button>
-    </div>
-    <div id="sessionStatusLine" style="font-size:13px;color:var(--muted);">Status: <span id="sessionStatusText">Checking...</span> <span id="sessionLockLabel"></span></div>
-    <div style="margin-top:10px;">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;">
-        <span>Workers apply</span><strong id="sessionPct">0%</strong>
-      </div>
-      <div style="height:10px;background:var(--input);border:1px solid var(--border);border-radius:99px;overflow:hidden;">
-        <div id="sessionBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--primary),var(--success));transition:width .3s;"></div>
-      </div>
-      <div id="sessionApplyDetail" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
-    </div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <button class="btn btn-outline btn-sm" onclick="unlockSession()">🔓 Unlock JSON</button>
-      <button class="btn btn-outline btn-sm" onclick="toggleBackupBox()">💾 Backup JSON</button>
-      <button class="btn btn-success btn-sm" onclick="loadBackup()">♻️ Use Backup</button>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
-        <input type="checkbox" id="shotToggle" onchange="toggleShots(this.checked)"/> Screenshots
-      </label>
-    </div>
-    <div id="backupBox" style="display:none;margin-top:12px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Backup JSON file upload karo ya paste karo.</div>
-      <input type="file" id="backupFile" accept=".json,application/json" style="margin-bottom:10px;"/>
-      <textarea id="backupJson" rows="4" placeholder='Ya paste karo...'></textarea>
-      <div style="display:flex;gap:10px;margin-top:8px;">
-        <button class="btn btn-success" onclick="saveBackup()" style="flex:1;">💾 Save Backup</button>
-        <button class="btn btn-outline" onclick="toggleBackupBox()">Cancel</button>
-      </div>
-    </div>
-    <div id="sessionEditBox" style="display:none;margin-top:12px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">JSON file upload karo ya paste karo.</div>
-      <input type="file" id="sessionFile" accept=".json,application/json" style="margin-bottom:10px;"/>
-      <textarea id="sessionJson" rows="6" placeholder='Ya yahan paste karo...'></textarea>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
-        <button class="btn btn-outline" onclick="cancelSessionEdit()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="stats">
-    <div class="stat"><div class="stat-k">Active Capacity</div><div class="stat-v"><span id="dashActive">0</span></div><div class="stat-s">allocated</div></div>
-    <div class="stat"><div class="stat-k">Meetings</div><div class="stat-v"><span id="dashMeetings">0</span></div><div class="stat-s">live</div></div>
-    <div class="stat"><div class="stat-k">Mode</div><div class="stat-v" id="dashMode">Ready</div><div class="stat-s">workers</div></div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="section-title">🚀 Launch / Schedule</div>
-      <div class="mode-toggle">
-        <div class="mode-btn active" id="modeSlow" onclick="setMode('individual')">🐢 Slow</div>
-        <div class="mode-btn" id="modeTogether" onclick="setMode('together')">⚡ Together</div>
-      </div>
-      <form onsubmit="handleStart();return false;">
-        <div class="form-group"><label>Meeting ID</label><input id="meetingId" placeholder="98695209590"/></div>
-        <div class="form-group"><label>Passcode</label><input id="passcode" placeholder="blank if none"/></div>
-        <div class="form-row">
-          <div class="form-group"><label>Bots</label><input type="number" id="botCount" value="10" min="1" max="500" oninput="updCount()"/></div>
-          <div class="form-group"><label>Name Type</label>
-            <select id="nameType" onchange="toggleCustom()">
-              <option value="indian">🇮🇳 Indian (Aarav Sharma)</option>
-              <option value="generation">✨ New generation</option>
-              <option value="english">🇺🇸 English</option>
-              <option value="custom">✏️ Custom</option>
-            </select>
-          </div>
-        </div>
-        <div id="customBox" style="display:none;margin-bottom:12px;">
-          <textarea id="customNames" rows="5" placeholder="One name per line"></textarea>
-          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Names: <b id="nameCount">0</b> Need: <b id="needCount">10</b></div>
-        </div>
-        <div class="form-group"><label>Duration (minutes)</label><input type="number" id="duration" value="120" min="1"/></div>
-        <div class="schedule-box">
-          <label><input type="checkbox" id="enableSchedule" onchange="toggleSchedule()"/> Enable Scheduling</label>
-          <div class="schedule-fields" id="scheduleFields">
-            <div class="form-group" style="margin:0"><label>Date</label><input type="date" id="scheduleDate"/></div>
-            <div class="form-group" style="margin:0"><label>Time IST</label><input type="time" id="scheduleTime"/></div>
-          </div>
-        </div>
-        <div class="btn-row">
-          <button type="submit" class="btn btn-primary" id="startBtn">▶ Start Now</button>
-          <button type="button" class="btn btn-danger" onclick="killAll()">Kill All</button>
-          <button type="button" class="btn btn-outline" id="pauseToggleBtn" onclick="toggleGlobalPause()">⏸️ Pause</button>
-        </div>
-      </form>
-      <div id="msg" class="log">Ready</div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <div class="section-title" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="toggleHfPanel()">
-        🔑 HF Spaces <span id="hfToggleHint" style="font-size:12px;color:var(--muted);">▾</span>
-      </div>
-      <div id="hfPanel" style="display:none;margin-top:12px;">
-        <div class="form-group">
-          <label>HF Access Token</label>
-          <div style="display:flex;gap:8px;">
-            <input id="hfToken" type="password" placeholder="hf_xxxxxxxx" style="flex:1;"/>
-            <button class="btn btn-outline" onclick="fetchSpaces()">Fetch</button>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;margin:10px 0;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
-            <input type="checkbox" id="hfEnableAll" onchange="hfBulk(this.checked)"/> Enable / Disable All
-          </label>
-        </div>
-        <div id="hfSpaceList" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;"></div>
-        <div id="hfStatus" style="font-size:12px;color:var(--muted);margin-top:8px;">Token daalo → Fetch</div>
-        <pre id="hfLogBox" style="background:#0f0d0c;padding:10px;border-radius:8px;max-height:140px;overflow:auto;font-size:11px;color:#fcd34d;display:none;margin-top:8px;"></pre>
-      </div>
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:16px;">
-      <div class="card">
-        <div class="section-title">🟢 Meetings</div>
-        <div class="search-row">
-          <input id="searchMeeting" placeholder="Search Meeting ID" oninput="filterMeetings()"/>
-          <button class="btn btn-danger btn-sm" onclick="killBySearch()">Kill</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>Meeting</th><th>Bots</th><th>Status</th><th></th></tr></thead>
-            <tbody id="tbodyActive"><tr><td colspan="5" class="empty">No meetings</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-title">📅 Scheduled</div>
-        <table>
-          <thead><tr><th>Meeting</th><th>Bots</th><th>When</th><th></th></tr></thead>
-          <tbody id="tbodySchedule"><tr><td colspan="4" class="empty">No scheduled</td></tr></tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div class="section-title" style="margin:0;">📜 Live Logs <span id="logFilterLabel"></span></div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-outline btn-sm" onclick="clearLogFilter();refreshLogs()">All</button>
-            <button class="btn btn-danger btn-sm" onclick="clearLogs()">Clear logs</button>
-          </div>
-        </div>
-        <div id="logPanel" class="log-panel">Waiting for logs...</div>
-      </div>
-      <div class="card" id="shotCard">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div class="section-title" style="margin:0;">🖼 Screenshots</div>
-          <button class="btn btn-outline btn-sm" onclick="wipeShots()">Clear shots</button>
-        </div>
-        <div id="shotGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;"></div>
-      </div>
-    </div>
-  </div>
+<header class="header">
+ <div class="brand"><div class="logo">⚡</div><div><h1>Zoom Command Center</h1><div class="subtitle">OPERATIONS • CAPACITY • LIVE MONITORING</div></div></div>
+ <div class="header-right">
+  <span class="status" id="connection">● Connecting...</span>
+  <button class="icon-btn" onclick="openTheme()" title="Themes">🎨</button>
+  <button class="icon-btn" onclick="toggleDayNight()" title="Day/Night">◐</button>
+  <button class="icon-btn" onclick="openHF()" title="HF Spaces">🔑</button>
+  <button class="btn btn-sm" onclick="refresh()">↻</button>
+ </div>
+</header>
+<section class="stats">
+ <div class="stat"><div class="stat-label">Active Capacity</div><div class="stat-value" id="activeCapacity">0</div><div class="stat-sub">Allocated</div></div>
+ <div class="stat"><div class="stat-label">Total Capacity</div><div class="stat-value" id="totalCapacity">0</div><div class="stat-sub">Infrastructure</div></div>
+ <div class="stat"><div class="stat-label">Workers Online</div><div class="stat-value" id="workers">0</div><div class="stat-sub">Connected</div></div>
+ <div class="stat"><div class="stat-label">Meetings</div><div class="stat-value" id="meetingCount">0</div><div class="stat-sub">Active</div></div>
+</section>
+<div class="main-grid">
+ <div>
+  <section class="card">
+   <div class="section-title">🖥 Infrastructure <span style="color:var(--primary)">LIVE</span></div>
+   <div class="progress-meta"><span>Utilization</span><strong id="capacityPercent">0%</strong></div>
+   <div class="progress-bg"><div class="progress-fill" id="capacityBar"></div></div>
+   <div style="margin-top:15px">
+    <div class="info-line"><span class="muted">Connection</span><span class="badge" id="connectionState">Checking</span></div>
+    <div class="info-line"><span class="muted">Workers</span><strong id="workerState">Standby</strong></div>
+    <div class="info-line"><span class="muted">Mode</span><strong id="systemMode">Ready</strong></div>
+    <div class="info-line"><span class="muted">Pause</span><strong id="pauseState">Unknown</strong></div>
+    <div class="info-line"><span class="muted">Last refresh</span><strong id="lastRefresh">--</strong></div>
+   </div>
+  </section>
+  <section class="card">
+   <div class="section-title">📊 Session</div>
+   <div class="info-line"><span class="muted">Status</span><span id="loginStatus" class="badge badge-warning">Checking</span></div>
+   <div class="info-line"><span class="muted">Message</span><strong id="sessionMessage">Waiting...</strong></div>
+   <div class="info-line"><span class="muted">Apply</span><strong id="applyPercent">0%</strong></div>
+   <div class="progress-bg"><div class="progress-fill" id="applyBar"></div></div>
+   <div class="muted" id="applyDetail" style="font-size:10px;margin-top:10px">Waiting...</div>
+  </section>
+  <section class="card">
+   <div class="section-title">💾 Backup</div>
+   <div class="field"><label>Backup JSON</label><input type="file" id="backupFile" accept=".json"></div>
+   <div class="field"><label>Or paste</label><textarea id="backupText" rows="3" style="width:100%;padding:12px;background:var(--input);border:1px solid var(--border);border-radius:11px;color:var(--text)"></textarea></div>
+   <div class="modal-actions">
+    <button class="btn btn-primary" onclick="saveBackup()">Save Backup</button>
+    <button class="btn" onclick="loadBackup()">Restore</button>
+   </div>
+   <div id="backupStatus" class="muted" style="font-size:11px">Ready</div>
+  </section>
+ </div>
+ <div>
+  <section class="card">
+   <div class="section-title">🟢 Meetings <span id="meetingCountLabel">0</span></div>
+   <input class="search" id="meetingSearch" placeholder="Search..." oninput="renderMeetings()">
+   <table><thead><tr><th>#</th><th>Meeting</th><th>Progress</th><th>Status</th></tr></thead><tbody id="meetingRows"><tr><td colspan="4" class="empty">Waiting...</td></tr></tbody></table>
+  </section>
+  <section class="card">
+   <div class="section-title">📅 Scheduled</div>
+   <table><thead><tr><th>Meeting</th><th>Bots</th><th>When</th></tr></thead><tbody id="scheduleRows"><tr><td colspan="3" class="empty">None</td></tr></tbody></table>
+  </section>
+  <section class="card">
+   <div class="section-title">📜 Logs <button class="btn btn-sm" onclick="refreshLogs()">Refresh</button></div>
+   <div class="log-panel" id="logPanel">Waiting...</div>
+  </section>
+ </div>
+</div>
 </div>
 
-<div class="modal-overlay" id="shutdownModal">
-  <div class="modal">
-    <h3>Shutdown?</h3>
-    <p style="font-size:13px;color:var(--muted);margin:8px 0">Type <b>yes</b></p>
-    <input type="text" id="shutdownConfirm"/>
-    <div style="display:flex;gap:10px;margin-top:8px;">
-      <button class="btn btn-danger" style="flex:1" onclick="confirmShutdown()">Shutdown</button>
-      <button class="btn btn-outline" onclick="closeShutdownModal()">Cancel</button>
-    </div>
+<div class="overlay" id="themeModal" onclick="outsideClose(event,'themeModal')">
+ <div class="modal" style="max-width:390px">
+  <div class="modal-head"><h2>🎨 Theme</h2><button class="close" onclick="closeModal('themeModal')">×</button></div>
+  <div class="theme-list" id="themeOptions"></div>
+ </div>
+</div>
+
+<div class="overlay" id="hfModal" onclick="outsideClose(event,'hfModal')">
+ <div class="modal">
+  <div class="modal-head"><h2>🔑 HF Spaces</h2><button class="close" onclick="closeModal('hfModal')">×</button></div>
+  <div class="field"><label>HF Access Token</label><input type="password" id="hfToken" placeholder="hf_xxxxxxxx"></div>
+  <div class="modal-actions"><button class="btn btn-primary" onclick="fetchSpaces()">↻ Fetch Spaces</button></div>
+  <div class="bulk-row">
+   <span>Enable / Disable All</span>
+   <label class="toggle"><input type="checkbox" id="hfAllToggle" onchange="hfBulk(this.checked)"><span class="slider"></span></label>
   </div>
+  <div class="info-line"><span class="muted">Spaces</span><strong id="hfCount">0</strong></div>
+  <div class="space-list" id="hfSpaceList"><div class="empty">Token daalo → Fetch</div></div>
+  <div class="muted" id="hfStatus" style="font-size:11px;margin-top:12px">Ready</div>
+ </div>
 </div>
 
 <script>
 const API=location.origin;
 const $=id=>document.getElementById(id);
-document.documentElement.setAttribute('data-theme', localStorage.getItem('zcc-theme')||'night');
-function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('zcc-theme',t)}
-let currentMode=localStorage.getItem('zcc-join-mode')||'individual';
-let allMeetings={}, allSchedules={}, isLoggedIn=false, activeLogMeeting=null;
-function setMode(m){currentMode=m;localStorage.setItem('zcc-join-mode',m);$('modeSlow').classList.toggle('active',m==='individual');$('modeTogether').classList.toggle('active',m==='together')}
-setMode(currentMode);
-function toggleSchedule(){const e=$('enableSchedule').checked;$('scheduleFields').classList.toggle('show',e);$('startBtn').textContent=e?'📅 Schedule':'▶ Start Now'}
-function show(m,t='info'){msg.innerHTML=`<span class="${t==='ok'?'ok':t==='err'?'err':''}">[${new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}] ${m}</span>`}
-function toggleCustom(){customBox.style.display=nameType.value==='custom'?'block':'none';updCount()}
-function updCount(){const b=parseInt(botCount.value)||0;const n=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);$('nameCount').textContent=n.length;$('needCount').textContent=b}
-customNames.addEventListener('input',updCount);
-setInterval(()=>{$('liveTime').textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'},1000);
-function toggleBackupBox(){const b=$('backupBox');b.style.display=b.style.display==='none'?'block':'none'}
-async function saveBackup(){
-  let data = null;
-  const fileInput = $('backupFile');
-  if(fileInput && fileInput.files && fileInput.files[0]){
-    const text = await fileInput.files[0].text();
-    try{ data = JSON.parse(text); }catch(e){ return show('Invalid backup file','err'); }
-  } else {
-    const raw = $('backupJson').value.trim();
-    if(!raw) return show('File select karo ya paste karo','err');
-    try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
-  }
-  if(!data.cookies) return show('Need cookies','err');
-  data = cleanSession(data);
-  const r = await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  show(r.ok?'Backup cleaned & saved':'Backup fail', r.ok?'ok':'err');
-  if(r.ok) $('backupBox').style.display='none';
-}
-async function loadBackup(){
-  if(!confirm('Load backup as active session?')) return;
-  const r=await fetch(API+'/api/load-backup',{method:'POST'});
-  const d=await r.json();
-  show(r.ok?'Backup loaded as active':'No backup or fail', r.ok?'ok':'err');
-  setTimeout(refresh,400);
-}
-let hfSpacesCache = [];
-function toggleHfPanel(){
-  const p = $('hfPanel');
-  const open = p.style.display === 'none';
-  p.style.display = open ? 'block' : 'none';
-  $('hfToggleHint').textContent = open ? '▴' : '▾';
-}
-async function fetchSpaces(){
-  const token = $('hfToken').value.trim();
-  if(!token) return show('Token daalo','err');
-  $('hfStatus').textContent = 'Fetching...';
-  const r = await fetch(API+'/api/hf/list', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({token})
-  });
-  const d = await r.json();
-  hfSpacesCache = d.spaces || [];
-  const box = $('hfSpaceList');
-  box.innerHTML = '';
-  if(!hfSpacesCache.length){
-    box.innerHTML = '<div style="color:var(--muted);font-size:12px;">No spaces</div>';
-    $('hfStatus').textContent = d.message || 'None';
-    return;
-  }
-  hfSpacesCache.forEach(sp => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;';
-    row.innerHTML = `<span style="word-break:break-all;">${sp}</span><label style="display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" data-space="${sp}" onchange="hfToggleOne(this)"/> On</label>`;
-    box.appendChild(row);
-  });
-  $('hfStatus').textContent = hfSpacesCache.length + ' spaces';
-  show(hfSpacesCache.length + ' loaded','ok');
-}
-async function hfToggleOne(el){
-  const token = $('hfToken').value.trim();
-  const sp = el.dataset.space;
-  const action = el.checked ? 'enable' : 'disable';
-  $('hfStatus').textContent = action + ' ' + sp.split('/').pop();
-  await fetch(API+'/api/hf/'+action, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({token, spaces: sp})
-  });
-}
-async function hfBulk(on){
-  const token = $('hfToken').value.trim();
-  if(!token || !hfSpacesCache.length) return;
-  const action = on ? 'enable' : 'disable';
-  $('hfStatus').textContent = action + ' all...';
-  document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c => c.checked = on);
-  await fetch(API+'/api/hf/'+action, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({token, spaces: hfSpacesCache.join(',')})
-  });
-  $('hfStatus').textContent = action + ' all done';
-  show(action + ' all','ok');
-}
-function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge'),st=$('sessionStatusText');
-  if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
-  else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st)st.textContent=s.message||'No session'}}
-function cleanSession(data){
-  if(!data || !data.cookies) return data;
-  const keep = data.cookies.filter(c => {
-    const d = (c.domain || "").toLowerCase();
-    return d.includes("zoom.us") || d.includes("zoom.com");
-  });
-  const origins = (data.origins || [])
-    .filter(o => (o.origin || "").includes("zoom"))
-    .map(o => ({
-      origin: o.origin,
-      localStorage: (o.localStorage || []).slice(0, 25),
-      indexedDB: []
-    }));
-  return { cookies: keep, origins };
-}
-
-async function saveSession(){
-  let data = null;
-  const fileInput = $('sessionFile');
-  if(fileInput && fileInput.files && fileInput.files[0]){
-    const text = await fileInput.files[0].text();
-    try{ data = JSON.parse(text); }catch(e){ return show('Invalid JSON file','err'); }
-  } else {
-    const raw = $('sessionJson').value.trim();
-    if(!raw) return show('File select karo ya paste karo','err');
-    try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
-  }
-  if(!data.cookies) return show('Need cookies','err');
-
-  // Auto clean
-  const original = data.cookies.length;
-  data = cleanSession(data);
-  show(`Cleaned: ${original} → ${data.cookies.length} cookies`,'info');
-
-  const r = await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d = await r.json();
-  if(r.ok){
-    show(d.message||'Saved','ok');
-    cancelSessionEdit();
-    pollApply(20);
-  } else show(d.detail||'Failed','err');
-}
-async function unlockSession(){
-  if(!confirm('Unlock session JSON?')) return;
-  const r=await fetch(API+'/api/session/unlock',{method:'POST'});
-  const d=await r.json();
-  show(r.ok?'Unlocked — new JSON paste allowed':'Unlock fail','ok');
-  refreshApply();
-}
-async function refreshApply(){
-  try{
-    const d=await (await fetch(API+'/api/session-apply-status')).json();
-    $('sessionPct').textContent=(d.percent||0)+'%';
-    $('sessionBar').style.width=(d.percent||0)+'%';
-    $('sessionLockLabel').textContent=d.locked?' 🔒 LOCKED':' 🔓 unlocked';
-    const rows=Object.entries(d.workers||{}).map(([w,s])=>`${w}: ${s.ok?'✅':'⏳'} ${s.cookies||0}`);
-    $('sessionApplyDetail').textContent=d.total_workers?(d.applied+'/'+d.total_workers+' workers  '+rows.join(' | ')):'No workers connected';
-  }catch(e){}
-}
-function pollApply(n){
-  refreshApply();
-  let left=n;
-  const t=setInterval(()=>{refreshApply(); left--; if(left<=0) clearInterval(t);},1000);
-}
-function renderLogs(logs){
-  const panel=$('logPanel');
-  if(!logs||!logs.length){panel.textContent='No logs';return}
-  panel.innerHTML=logs.map(l=>`<div class="${l.level||''}"><span style="color:var(--muted)">${l.time}</span> [${l.meeting}] ${l.message}</div>`).join('');
-  panel.scrollTop=panel.scrollHeight;
-}
-async function refreshLogs(){
-  const q=activeLogMeeting?`?meeting=${encodeURIComponent(activeLogMeeting)}&limit=150`:'?limit=120';
-  const r=await fetch(API+'/api/logs'+q); const d=await r.json();
-  renderLogs(d.logs||[]); $('logFilterLabel').textContent=activeLogMeeting?' • '+activeLogMeeting:'';
-}
-function selectMeetingLogs(m){activeLogMeeting=m;refreshLogs()}
-function clearLogFilter(){activeLogMeeting=null}
-function renderActive(meetings){
-  allMeetings=meetings;
-  const search=($('searchMeeting').value||'').trim().toLowerCase();
-  let rows=Object.entries(meetings); if(search) rows=rows.filter(([m])=>m.includes(search));
-  if(!rows.length){$('tbodyActive').innerHTML='<tr><td colspan="5" class="empty">No meetings</td></tr>';return}
-  $('tbodyActive').innerHTML=rows.map(([meeting,m],i)=>`<tr onclick="selectMeetingLogs('${meeting}')">
-    <td>${i+1}</td><td>${meeting}</td><td>${m.completed_bots||0}/${m.total_bots||0}</td>
-    <td><span class="badge badge-running">${m.status||'running'}</span></td>
-    <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();killMeeting('${meeting}')">Kill</button></td></tr>`).join('');
-}
-function renderSchedules(s){
-  allSchedules=s; const e=Object.entries(s);
-  if(!e.length){$('tbodySchedule').innerHTML='<tr><td colspan="4" class="empty">No scheduled</td></tr>';return}
-  $('tbodySchedule').innerHTML=e.map(([id,x])=>`<tr><td>${x.meeting_code}</td><td>${x.bot_count}</td>
-    <td>${new Date(x.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="deleteSchedule('${id}')">Cancel</button></td></tr>`).join('');
-}
-function filterMeetings(){renderActive(allMeetings)}
-async function toggleGlobalPause(){
-  const d=await (await fetch(API+'/api/pause-status')).json();
-  if(d.paused){await fetch(API+'/api/resume',{method:'POST'});$('pauseToggleBtn').textContent='⏸️ Pause'}
-  else {await fetch(API+'/api/pause',{method:'POST'});$('pauseToggleBtn').textContent='▶️ Resume'}
-  refresh();
-}
-async function refresh(){
-  try{
-    const d=await (await fetch(API+'/status')).json();
-    if(d.session) updateSessionUI(d.session);
-    const connected=d.connected_workers_count||0;
-    const active=(d.total_capacity||0)-(d.total_free_capacity||0);
-    totalCap.textContent=active; totalCapMax.textContent=d.total_capacity||0;
-    dashActive.textContent=active; dashMeetings.textContent=Object.keys(d.meetings||{}).length;
-    dashMode.textContent=connected?connected+' Worker':'Standby';
-    renderActive(d.meetings||{}); renderSchedules(d.schedules||{});
-    if(d.pause_state) $('pauseToggleBtn').textContent='▶️ Resume';
-    if(d.recent_logs&&!activeLogMeeting) renderLogs(d.recent_logs); else await refreshLogs();
-    show('Refreshed • '+connected+' worker(s)','ok');
-  }catch(e){show(e.message,'err')}
-}
-async function handleStart(){
-  if(!isLoggedIn) return show('Pehle session JSON save karo','err');
-  const meeting=meetingId.value.trim().replace(/\s/g,'');
-  const bots=parseInt(botCount.value)||10, dur=parseInt(duration.value)||120, type=nameType.value;
-  let custom=null;
-  if(type==='custom'){custom=customNames.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean); if(custom.length<bots) return show('Need more names','err')}
-  if(!meeting) return show('Meeting ID','err');
-  if($('enableSchedule').checked){
-    const date=$('scheduleDate').value,time=$('scheduleTime').value; if(!date||!time) return show('date/time','err');
-    const r=await fetch(API+'/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:passcode.value,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode,schedule_at:`${date}T${time}:00`})});
-    const d=await r.json(); show(r.ok?(d.message||'Scheduled'): (d.detail||'fail'), r.ok?'ok':'err');
-  } else {
-    const r=await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting,passcode:passcode.value,bot_count:bots,duration_minutes:dur,name_type:type,custom_names:custom,join_mode:currentMode})});
-    const d=await r.json(); show(r.ok?(d.message||'Started'):(d.detail||'fail'), r.ok?'ok':'err');
-  }
-  setTimeout(refresh,600);
-}
-async function killMeeting(meeting){if(!confirm('Kill '+meeting+'?'))return; const r=await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({meeting_code:meeting})}); show((await r.json()).message||'Killed', r.ok?'ok':'err'); setTimeout(refresh,400)}
-async function killBySearch(){const m=$('searchMeeting').value.trim().replace(/\s/g,''); if(m) await killMeeting(m)}
-async function killAll(){if(!confirm('Kill ALL?'))return; await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); refresh()}
-async function deleteSchedule(id){await fetch(API+'/api/schedule/'+id,{method:'DELETE'}); refresh()}
-function openShutdownModal(){$('shutdownModal').style.display='flex'}
-function closeShutdownModal(){$('shutdownModal').style.display='none'}
-async function confirmShutdown(){if($('shutdownConfirm').value.trim().toLowerCase()!=='yes')return alert('type yes'); await fetch(API+'/api/shutdown',{method:'POST'}); closeShutdownModal()}
-async function toggleShots(on){
-  await fetch(API+'/api/screenshots/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!!on})});
-  show('Screenshots '+(on?'ON':'OFF'),'ok');
-}
-async function loadShots(){
-  try{
-    const d=await (await fetch(API+'/api/screenshots')).json();
-    if($('shotToggle')) $('shotToggle').checked=!!d.enabled;
-    const g=$('shotGrid'); if(!g) return;
-    const items=d.items||[];
-    if(!items.length){g.innerHTML='<div class="empty">No screenshots</div>';return;}
-    g.innerHTML=items.slice().reverse().map(x=>`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--input)">
-      <img src="data:image/png;base64,${x.data}" style="width:100%;display:block;cursor:pointer" onclick="window.open(this.src)"/>
-      <div style="padding:6px;font-size:10px;color:var(--muted)">${x.ts} ${x.tag} ${x.step}</div>
-    </div>`).join('');
-  }catch(e){}
-}
-async function wipeShots(){await fetch(API+'/api/screenshots',{method:'DELETE'});loadShots()}
-async function clearLogs(){
-  await fetch(API+'/api/logs/clear',{method:'POST'});
-  refreshLogs(); show('Logs cleared','ok');
-}
-refresh(); refreshApply(); loadShots();
-setInterval(refresh,8000); setInterval(refreshLogs,3000); setInterval(refreshApply,2000); setInterval(loadShots,4000);
+const themes=[{id:'amber',name:'Amber',color:'#f59e0b',second:'#ea580c'},{id:'blue',name:'Blue',color:'#38bdf8',second:'#2563eb'},{id:'purple',name:'Purple',color:'#c084fc',second:'#7c3aed'},{id:'emerald',name:'Emerald',color:'#34d399',second:'#059669'},{id:'red',name:'Red',color:'#fb7185',second:'#dc2626'},{id:'cyan',name:'Cyan',color:'#22d3ee',second:'#0891b2'},{id:'pink',name:'Pink',color:'#f472b6',second:'#db2777'}];
+let allMeetings={}, hfSpaces=[];
+function applyPreferences(){document.documentElement.dataset.color=localStorage.getItem('zcc-color')||'amber';document.documentElement.dataset.theme=localStorage.getItem('zcc-theme')||'night'}
+applyPreferences();
+function openTheme(){renderThemes();$('themeModal').style.display='flex'}
+function renderThemes(){const s=document.documentElement.dataset.color;$('themeOptions').innerHTML=themes.map(t=>`<button class="theme-option ${s===t.id?'active':''}" onclick="selectTheme('${t.id}')"><div class="swatch" style="background:linear-gradient(135deg,${t.color},${t.second})"></div>${t.name}</button>`).join('')}
+function selectTheme(c){document.documentElement.dataset.color=c;localStorage.setItem('zcc-color',c);renderThemes()}
+function toggleDayNight(){const n=document.documentElement.dataset.theme==='night'?'day':'night';document.documentElement.dataset.theme=n;localStorage.setItem('zcc-theme',n)}
+function openHF(){$('hfModal').style.display='flex'}
+function closeModal(id){$(id).style.display='none'}
+function outsideClose(e,id){if(e.target.id===id)closeModal(id)}
+function notify(m,ok=true){$('backupStatus').textContent=m;$('backupStatus').style.color=ok?'var(--success)':'var(--danger)'}
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c]))}
+function renderMeetings(){const q=$('meetingSearch').value.trim().toLowerCase();const e=Object.entries(allMeetings).filter(([id])=>id.toLowerCase().includes(q));$('meetingRows').innerHTML=e.length?e.map(([id,m],i)=>`<tr><td>${i+1}</td><td>${escapeHTML(id)}</td><td>${m.completed_bots||0}/${m.total_bots||0}</td><td><span class="badge">${escapeHTML(m.status||'Running')}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">None</td></tr>'}
+function renderSchedules(d){const e=Object.entries(d||{});$('scheduleRows').innerHTML=e.length?e.map(([id,x])=>`<tr><td>${escapeHTML(x.meeting_code||'')}</td><td>${x.bot_count||0}</td><td>${x.schedule_at?new Date(x.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'}):'--'}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">None</td></tr>'}
+async function refresh(){try{const r=await fetch(API+'/status');if(!r.ok)throw 0;const d=await r.json();const total=Number(d.total_capacity)||0,free=Number(d.total_free_capacity)||0,active=Math.max(0,total-free),wc=Number(d.connected_workers_count)||0;const meetings=d.meetings||{};$('activeCapacity').textContent=active;$('totalCapacity').textContent=total;$('workers').textContent=wc;$('meetingCount').textContent=Object.keys(meetings).length;$('meetingCountLabel').textContent=Object.keys(meetings).length+' ACTIVE';const pct=total?Math.round(active/total*100):0;$('capacityPercent').textContent=pct+'%';$('capacityBar').style.width=pct+'%';$('connection').textContent='● Connected';$('connectionState').textContent='Online';$('workerState').textContent=wc+' Connected';$('systemMode').textContent=wc?'Operational':'Standby';$('lastRefresh').textContent=new Date().toLocaleTimeString();$('pauseState').textContent=d.pause_state?'Paused':'Running';if(d.session){$('loginStatus').textContent=d.session.logged_in?'Logged In':'No Session';$('loginStatus').className='badge '+(d.session.logged_in?'':'badge-warning');$('sessionMessage').textContent=d.session.message||'--'}allMeetings=meetings;renderMeetings();renderSchedules(d.schedules||{});if(d.recent_logs)renderLogs(d.recent_logs)}catch(e){$('connection').textContent='● Disconnected';$('connectionState').textContent='Offline'}}
+function renderLogs(logs){const p=$('logPanel');if(!logs||!logs.length){p.textContent='No logs';return}p.innerHTML=logs.map(l=>`<div class="log-line"><span class="muted">${escapeHTML(l.time||'')}</span> [${escapeHTML(l.meeting||'')}] ${escapeHTML(l.message||'')}</div>`).join('');p.scrollTop=p.scrollHeight}
+async function refreshLogs(){try{const d=await (await fetch(API+'/api/logs?limit=120')).json();renderLogs(d.logs||[])}catch(e){}}
+async function refreshApply(){try{const d=await (await fetch(API+'/api/session-apply-status')).json();const pct=Number(d.percent)||0;$('applyPercent').textContent=pct+'%';$('applyBar').style.width=pct+'%';$('applyDetail').textContent=d.total_workers?`${d.applied||0}/${d.total_workers} workers`:'No workers'}catch(e){}}
+async function saveBackup(){let data;const f=$('backupFile').files[0];try{const raw=f?await f.text():$('backupText').value.trim();if(!raw)throw Error('No data');data=JSON.parse(raw);if(!data.cookies)throw Error('No cookies');const r=await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok)throw Error('Fail');notify('Backup saved')}catch(e){notify(e.message,false)}}
+async function loadBackup(){if(!confirm('Restore backup?'))return;try{const r=await fetch(API+'/api/load-backup',{method:'POST'});if(!r.ok)throw Error('Fail');notify('Restored');refresh()}catch(e){notify(e.message,false)}}
+async function fetchSpaces(){const token=$('hfToken').value.trim();if(!token){$('hfStatus').textContent='Token daalo';return}$('hfStatus').textContent='Fetching...';try{const r=await fetch(API+'/api/hf/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});const d=await r.json();hfSpaces=d.spaces||[];$('hfCount').textContent=hfSpaces.length;renderSpaces();$('hfStatus').textContent=hfSpaces.length+' spaces'}catch(e){$('hfStatus').textContent=e.message}}
+function renderSpaces(){const list=$('hfSpaceList');if(!hfSpaces.length){list.innerHTML='<div class="empty">None</div>';return}list.innerHTML=hfSpaces.map((sp,i)=>`<div class="space-row"><span style="word-break:break-all;flex:1">${escapeHTML(sp)}</span><label class="toggle"><input type="checkbox" data-idx="${i}" onchange="toggleOne(this)"><span class="slider"></span></label></div>`).join('')}
+async function toggleOne(el){const token=$('hfToken').value.trim();const sp=hfSpaces[el.dataset.idx];const on=el.checked;$('hfStatus').textContent=(on?'Enabling ':'Disabling ')+sp.split('/').pop();try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:sp})});$('hfStatus').textContent=sp.split('/').pop()+' '+(on?'ON':'OFF')}catch(e){$('hfStatus').textContent=e.message;el.checked=!on}}
+async function hfBulk(on){const token=$('hfToken').value.trim();if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}$('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});$('hfStatus').textContent=on?'All ON':'All OFF'}catch(e){$('hfStatus').textContent=e.message}}
+refresh();refreshApply();refreshLogs();
+setInterval(refresh,8000);setInterval(refreshApply,3000);setInterval(refreshLogs,5000);
 </script>
 </body>
 </html>
