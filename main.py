@@ -400,6 +400,52 @@ async def hf_list(request: Request):
     except Exception as e:
         return {"spaces": [], "message": str(e)[:120]}
 
+@app.post("/api/hf/push")
+async def hf_push(request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    spaces = [s.strip() for s in (body.get("spaces") or "").split(",") if s.strip()]
+    if not token or not spaces:
+        raise HTTPException(400, "Token + spaces required")
+    # Load worker code
+    worker_path = "hf_app.py"
+    if not os.path.exists(worker_path):
+        return {"success": False, "message": "hf_app.py not found on server"}
+    code = open(worker_path).read()
+    results = []
+    async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {token}"}) as c:
+        for sp in spaces:
+            try:
+                r = await c.post(
+                    f"https://huggingface.co/api/spaces/{sp}/commit/main",
+                    json={"operations": [{"operation": "addOrUpdate", "path": "app.py", "content": code}], "summary": "Push worker"}
+                )
+                await c.post(f"https://huggingface.co/api/spaces/{sp}/restart")
+                results.append({"space": sp, "status": r.status_code})
+            except Exception as e:
+                results.append({"space": sp, "error": str(e)[:60]})
+    return {"success": True, "message": f"Pushed to {len(spaces)} spaces", "results": results}
+
+@app.post("/api/hf/private")
+async def hf_private(request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    spaces = [s.strip() for s in (body.get("spaces") or "").split(",") if s.strip()]
+    if not token or not spaces:
+        raise HTTPException(400, "Token + spaces required")
+    results = []
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as c:
+        for sp in spaces:
+            try:
+                r = await c.put(
+                    f"https://huggingface.co/api/spaces/{sp}/settings",
+                    json={"private": True}
+                )
+                results.append({"space": sp, "status": r.status_code})
+            except Exception as e:
+                results.append({"space": sp, "error": str(e)[:60]})
+    return {"success": True, "message": f"Private set on {len(spaces)}", "results": results}
+
 @app.post("/api/hf/{action}")
 async def hf_control(action: str, request: Request):
     body = await request.json()
