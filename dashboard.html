@@ -269,7 +269,7 @@ async function startMeeting(){
   };
   $('launchMsg').textContent='Starting...';
   try{
-    const r = await fetch(API+'/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(API+'/api/start-bots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d = await r.json();
     $('launchMsg').textContent = r.ok ? 'Started' : (d.detail||'Failed');
     if(r.ok) refresh();
@@ -278,7 +278,7 @@ async function startMeeting(){
 async function killAll(){
   if(!confirm('Kill all meetings?'))return;
   try{
-    await fetch(API+'/api/kill-all',{method:'POST'});
+    await fetch(API+'/api/terminate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
     $('launchMsg').textContent='Kill sent';
     refresh();
   }catch(e){$('launchMsg').textContent=e.message}
