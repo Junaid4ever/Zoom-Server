@@ -270,9 +270,9 @@ async function saveBackup(){
     try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
   }
   if(!data.cookies) return show('Need cookies','err');
+  data = cleanSession(data);
   const r = await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d = await r.json();
-  show(r.ok?'Backup saved':'Backup fail', r.ok?'ok':'err');
+  show(r.ok?'Backup cleaned & saved':'Backup fail', r.ok?'ok':'err');
   if(r.ok) $('backupBox').style.display='none';
 }
 async function loadBackup(){
@@ -286,6 +286,22 @@ function cancelSessionEdit(){$('sessionEditBox').style.display='none';$('session
 function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge'),st=$('sessionStatusText');
   if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
   else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st)st.textContent=s.message||'No session'}}
+function cleanSession(data){
+  if(!data || !data.cookies) return data;
+  const keep = data.cookies.filter(c => {
+    const d = (c.domain || "").toLowerCase();
+    return d.includes("zoom.us") || d.includes("zoom.com");
+  });
+  const origins = (data.origins || [])
+    .filter(o => (o.origin || "").includes("zoom"))
+    .map(o => ({
+      origin: o.origin,
+      localStorage: (o.localStorage || []).slice(0, 25),
+      indexedDB: []
+    }));
+  return { cookies: keep, origins };
+}
+
 async function saveSession(){
   let data = null;
   const fileInput = $('sessionFile');
@@ -298,7 +314,12 @@ async function saveSession(){
     try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
   }
   if(!data.cookies) return show('Need cookies','err');
-  show('Saving session...','info');
+
+  // Auto clean
+  const original = data.cookies.length;
+  data = cleanSession(data);
+  show(`Cleaned: ${original} → ${data.cookies.length} cookies`,'info');
+
   const r = await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const d = await r.json();
   if(r.ok){
