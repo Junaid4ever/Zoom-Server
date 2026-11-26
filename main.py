@@ -375,6 +375,28 @@ async def keeper_update_session(request: Request):
     return {"success": True, "message": "Session updated by keeper"}
 
 
+@app.post("/api/hf/list")
+async def hf_list(request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    if not token:
+        raise HTTPException(400, "Token required")
+    try:
+        async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as c:
+            r = await c.get("https://huggingface.co/api/spaces")
+            if r.status_code != 200:
+                return {"spaces": [], "message": f"HF error {r.status_code}"}
+            data = r.json()
+            # Filter to user's own spaces (author matches or private)
+            spaces = []
+            for s in data:
+                sid = s.get("id") or ""
+                if sid:
+                    spaces.append(sid)
+            return {"spaces": spaces[:50], "message": f"{len(spaces)} spaces"}
+    except Exception as e:
+        return {"spaces": [], "message": str(e)[:120]}
+
 @app.post("/api/hf/{action}")
 async def hf_control(action: str, request: Request):
     body = await request.json()
