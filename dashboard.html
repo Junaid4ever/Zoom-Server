@@ -121,16 +121,18 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
       </label>
     </div>
     <div id="backupBox" style="display:none;margin-top:12px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste backup zoom_session.json. Agar active session na ho to yahi use hoga.</div>
-      <textarea id="backupJson" rows="6" placeholder='{"cookies":[...]}'></textarea>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Backup JSON file upload karo ya paste karo.</div>
+      <input type="file" id="backupFile" accept=".json,application/json" style="margin-bottom:10px;"/>
+      <textarea id="backupJson" rows="4" placeholder='Ya paste karo...'></textarea>
       <div style="display:flex;gap:10px;margin-top:8px;">
         <button class="btn btn-success" onclick="saveBackup()" style="flex:1;">💾 Save Backup</button>
         <button class="btn btn-outline" onclick="toggleBackupBox()">Cancel</button>
       </div>
     </div>
     <div id="sessionEditBox" style="display:none;margin-top:12px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Paste full zoom_session.json — ek baar. Saare workers yahi use karenge.</div>
-      <textarea id="sessionJson" rows="8" placeholder='{"cookies":[...],"origins":[...]}'></textarea>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">JSON file upload karo ya paste karo.</div>
+      <input type="file" id="sessionFile" accept=".json,application/json" style="margin-bottom:10px;"/>
+      <textarea id="sessionJson" rows="6" placeholder='Ya yahan paste karo...'></textarea>
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-success" onclick="saveSession()" style="flex:1;">💾 Save Session</button>
         <button class="btn btn-outline" onclick="cancelSessionEdit()">Cancel</button>
@@ -257,11 +259,19 @@ customNames.addEventListener('input',updCount);
 setInterval(()=>{$('liveTime').textContent=new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})+' IST'},1000);
 function toggleBackupBox(){const b=$('backupBox');b.style.display=b.style.display==='none'?'block':'none'}
 async function saveBackup(){
-  const raw=$('backupJson').value.trim(); if(!raw) return show('Paste backup JSON','err');
-  let data; try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}
+  let data = null;
+  const fileInput = $('backupFile');
+  if(fileInput && fileInput.files && fileInput.files[0]){
+    const text = await fileInput.files[0].text();
+    try{ data = JSON.parse(text); }catch(e){ return show('Invalid backup file','err'); }
+  } else {
+    const raw = $('backupJson').value.trim();
+    if(!raw) return show('File select karo ya paste karo','err');
+    try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
+  }
   if(!data.cookies) return show('Need cookies','err');
-  const r=await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d=await r.json();
+  const r = await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d = await r.json();
   show(r.ok?'Backup saved':'Backup fail', r.ok?'ok':'err');
   if(r.ok) $('backupBox').style.display='none';
 }
@@ -277,14 +287,22 @@ function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge
   if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
   else{badge.className='session-badge logged-out';badge.textContent='🔴 No Session';if(st)st.textContent=s.message||'No session'}}
 async function saveSession(){
-  const raw=$('sessionJson').value.trim(); if(!raw) return show('Paste JSON','err');
-  let data; try{data=JSON.parse(raw)}catch(e){return show('Invalid JSON','err')}
+  let data = null;
+  const fileInput = $('sessionFile');
+  if(fileInput && fileInput.files && fileInput.files[0]){
+    const text = await fileInput.files[0].text();
+    try{ data = JSON.parse(text); }catch(e){ return show('Invalid JSON file','err'); }
+  } else {
+    const raw = $('sessionJson').value.trim();
+    if(!raw) return show('File select karo ya paste karo','err');
+    try{ data = JSON.parse(raw); }catch(e){ return show('Invalid JSON','err'); }
+  }
   if(!data.cookies) return show('Need cookies','err');
-  show('Saving + GitHub push + workers...','info');
-  const r=await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d=await r.json();
+  show('Saving session...','info');
+  const r = await fetch(API+'/api/update-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d = await r.json();
   if(r.ok){
-    show((d.message||'Saved')+' | GitHub: '+(d.github_message||'-'), d.github?'ok':'err');
+    show(d.message||'Saved','ok');
     cancelSessionEdit();
     pollApply(20);
   } else show(d.detail||'Failed','err');
