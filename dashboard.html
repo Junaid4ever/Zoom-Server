@@ -302,7 +302,17 @@ async function makePrivate(){
     const d=await r.json();
     $('hfStatus').textContent=d.message||'Done';
   }catch(e){$('hfStatus').textContent=e.message}
-}const token=$('hfToken').value.trim();if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}$('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});$('hfStatus').textContent=on?'All ON':'All OFF'}catch(e){$('hfStatus').textContent=e.message}}
+}
+async function hfBulk(on){
+  const token=$('hfToken').value.trim();
+  if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}
+  $('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';
+  document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);
+  try{
+    await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});
+    $('hfStatus').textContent=on?'All ON':'All OFF';
+  }catch(e){$('hfStatus').textContent=e.message}
+}
 refresh();refreshApply();refreshLogs();
 setInterval(refresh,8000);setInterval(refreshApply,3000);setInterval(refreshLogs,5000);
 </script>
