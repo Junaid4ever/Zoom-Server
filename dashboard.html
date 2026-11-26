@@ -109,6 +109,38 @@ td{padding:12px 9px;border-bottom:1px solid var(--border)}
 <div class="main-grid">
  <div>
   <section class="card">
+   <div class="section-title">🚀 Launch Meeting</div>
+   <div class="field"><label>Meeting ID</label><input id="meetingId" placeholder="98695209590"></div>
+   <div class="field"><label>Passcode</label><input id="passcode" placeholder="blank if none"></div>
+   <div class="field"><label>Bots</label><input type="number" id="botCount" value="10" min="1"></div>
+   <div class="field">
+    <label>Name Type</label>
+    <select id="nameType" onchange="toggleCustom()" style="width:100%;padding:10px;background:var(--input);border:1px solid var(--border);border-radius:10px;color:var(--text)">
+     <option value="indian">Indian (Aarav Sharma)</option>
+     <option value="generation">New generation</option>
+     <option value="english">English</option>
+     <option value="custom">Custom</option>
+    </select>
+   </div>
+   <div id="customBox" class="field" style="display:none;">
+    <label>Custom Names (one per line)</label>
+    <textarea id="customNames" rows="4" style="width:100%;padding:10px;background:var(--input);border:1px solid var(--border);border-radius:10px;color:var(--text)"></textarea>
+   </div>
+   <div class="field"><label>Duration (min)</label><input type="number" id="duration" value="60" min="1"></div>
+   <div class="field">
+    <label>Join Mode</label>
+    <select id="joinMode" style="width:100%;padding:10px;background:var(--input);border:1px solid var(--border);border-radius:10px;color:var(--text)">
+     <option value="together">Together</option>
+     <option value="individual">Individual</option>
+    </select>
+   </div>
+   <div class="modal-actions">
+    <button class="btn btn-primary" onclick="startMeeting()">▶ Start</button>
+    <button class="btn" onclick="killAll()">Kill All</button>
+   </div>
+   <div id="launchMsg" class="muted" style="font-size:11px;margin-top:8px">Ready</div>
+  </section>
+  <section class="card">
    <div class="section-title">🖥 Infrastructure <span style="color:var(--primary)">LIVE</span></div>
    <div class="progress-meta"><span>Utilization</span><strong id="capacityPercent">0%</strong></div>
    <div class="progress-bg"><div class="progress-fill" id="capacityBar"></div></div>
@@ -168,7 +200,19 @@ td{padding:12px 9px;border-bottom:1px solid var(--border)}
  <div class="modal">
   <div class="modal-head"><h2>🔑 HF Spaces</h2><button class="close" onclick="closeModal('hfModal')">×</button></div>
   <div class="field"><label>HF Access Token</label><input type="password" id="hfToken" placeholder="hf_xxxxxxxx"></div>
-  <div class="modal-actions"><button class="btn btn-primary" onclick="fetchSpaces()">↻ Fetch Spaces</button></div>
+  <div class="modal-actions">
+   <button class="btn btn-primary" onclick="fetchSpaces()">↻ Fetch</button>
+   <button class="btn" onclick="pushToAll()">📤 Push Worker</button>
+   <button class="btn" onclick="makePrivate()">🔒 Make Private</button>
+  </div>
+  <div class="field">
+   <label>Hardware (new spaces)</label>
+   <select id="hfHardware" style="width:100%;padding:10px;background:var(--input);border:1px solid var(--border);border-radius:10px;color:var(--text)">
+    <option value="cpu-basic">CPU basic (Free)</option>
+    <option value="cpu-upgrade">CPU upgrade ($0.03/hr)</option>
+    <option value="zero-a10g">ZeroGPU (Free)</option>
+   </select>
+  </div>
   <div class="bulk-row">
    <span>Enable / Disable All</span>
    <label class="toggle"><input type="checkbox" id="hfAllToggle" onchange="hfBulk(this.checked)"><span class="slider"></span></label>
@@ -197,6 +241,37 @@ function notify(m,ok=true){$('backupStatus').textContent=m;$('backupStatus').sty
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c]))}
 function renderMeetings(){const q=$('meetingSearch').value.trim().toLowerCase();const e=Object.entries(allMeetings).filter(([id])=>id.toLowerCase().includes(q));$('meetingRows').innerHTML=e.length?e.map(([id,m],i)=>`<tr><td>${i+1}</td><td>${escapeHTML(id)}</td><td>${m.completed_bots||0}/${m.total_bots||0}</td><td><span class="badge">${escapeHTML(m.status||'Running')}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">None</td></tr>'}
 function renderSchedules(d){const e=Object.entries(d||{});$('scheduleRows').innerHTML=e.length?e.map(([id,x])=>`<tr><td>${escapeHTML(x.meeting_code||'')}</td><td>${x.bot_count||0}</td><td>${x.schedule_at?new Date(x.schedule_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'}):'--'}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">None</td></tr>'}
+function toggleCustom(){
+  $('customBox').style.display = $('nameType').value === 'custom' ? 'block' : 'none';
+}
+async function startMeeting(){
+  const meeting = $('meetingId').value.trim().replace(/\s/g,'');
+  if(!meeting){$('launchMsg').textContent='Meeting ID daalo';return}
+  const body = {
+    meeting_code: meeting,
+    passcode: $('passcode').value.trim(),
+    bot_count: parseInt($('botCount').value)||10,
+    duration_minutes: parseInt($('duration').value)||60,
+    name_type: $('nameType').value,
+    join_mode: $('joinMode').value,
+    custom_names: $('nameType').value==='custom' ? $('customNames').value.split('\n').map(s=>s.trim()).filter(Boolean) : []
+  };
+  $('launchMsg').textContent='Starting...';
+  try{
+    const r = await fetch(API+'/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    $('launchMsg').textContent = r.ok ? 'Started' : (d.detail||'Failed');
+    if(r.ok) refresh();
+  }catch(e){$('launchMsg').textContent=e.message}
+}
+async function killAll(){
+  if(!confirm('Kill all meetings?'))return;
+  try{
+    await fetch(API+'/api/kill-all',{method:'POST'});
+    $('launchMsg').textContent='Kill sent';
+    refresh();
+  }catch(e){$('launchMsg').textContent=e.message}
+}
 async function refresh(){try{const r=await fetch(API+'/status');if(!r.ok)throw 0;const d=await r.json();const total=Number(d.total_capacity)||0,free=Number(d.total_free_capacity)||0,active=Math.max(0,total-free),wc=Number(d.connected_workers_count)||0;const meetings=d.meetings||{};$('activeCapacity').textContent=active;$('totalCapacity').textContent=total;$('workers').textContent=wc;$('meetingCount').textContent=Object.keys(meetings).length;$('meetingCountLabel').textContent=Object.keys(meetings).length+' ACTIVE';const pct=total?Math.round(active/total*100):0;$('capacityPercent').textContent=pct+'%';$('capacityBar').style.width=pct+'%';$('connection').textContent='● Connected';$('connectionState').textContent='Online';$('workerState').textContent=wc+' Connected';$('systemMode').textContent=wc?'Operational':'Standby';$('lastRefresh').textContent=new Date().toLocaleTimeString();$('pauseState').textContent=d.pause_state?'Paused':'Running';if(d.session){$('loginStatus').textContent=d.session.logged_in?'Logged In':'No Session';$('loginStatus').className='badge '+(d.session.logged_in?'':'badge-warning');$('sessionMessage').textContent=d.session.message||'--'}allMeetings=meetings;renderMeetings();renderSchedules(d.schedules||{});if(d.recent_logs)renderLogs(d.recent_logs)}catch(e){$('connection').textContent='● Disconnected';$('connectionState').textContent='Offline'}}
 function renderLogs(logs){const p=$('logPanel');if(!logs||!logs.length){p.textContent='No logs';return}p.innerHTML=logs.map(l=>`<div class="log-line"><span class="muted">${escapeHTML(l.time||'')}</span> [${escapeHTML(l.meeting||'')}] ${escapeHTML(l.message||'')}</div>`).join('');p.scrollTop=p.scrollHeight}
 async function refreshLogs(){try{const d=await (await fetch(API+'/api/logs?limit=120')).json();renderLogs(d.logs||[])}catch(e){}}
@@ -206,7 +281,28 @@ async function loadBackup(){if(!confirm('Restore backup?'))return;try{const r=aw
 async function fetchSpaces(){const token=$('hfToken').value.trim();if(!token){$('hfStatus').textContent='Token daalo';return}$('hfStatus').textContent='Fetching...';try{const r=await fetch(API+'/api/hf/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});const d=await r.json();hfSpaces=d.spaces||[];$('hfCount').textContent=hfSpaces.length;renderSpaces();$('hfStatus').textContent=hfSpaces.length+' spaces'}catch(e){$('hfStatus').textContent=e.message}}
 function renderSpaces(){const list=$('hfSpaceList');if(!hfSpaces.length){list.innerHTML='<div class="empty">None</div>';return}list.innerHTML=hfSpaces.map((sp,i)=>`<div class="space-row"><span style="word-break:break-all;flex:1">${escapeHTML(sp)}</span><label class="toggle"><input type="checkbox" data-idx="${i}" onchange="toggleOne(this)"><span class="slider"></span></label></div>`).join('')}
 async function toggleOne(el){const token=$('hfToken').value.trim();const sp=hfSpaces[el.dataset.idx];const on=el.checked;$('hfStatus').textContent=(on?'Enabling ':'Disabling ')+sp.split('/').pop();try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:sp})});$('hfStatus').textContent=sp.split('/').pop()+' '+(on?'ON':'OFF')}catch(e){$('hfStatus').textContent=e.message;el.checked=!on}}
-async function hfBulk(on){const token=$('hfToken').value.trim();if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}$('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});$('hfStatus').textContent=on?'All ON':'All OFF'}catch(e){$('hfStatus').textContent=e.message}}
+async function pushToAll(){
+  const token=$('hfToken').value.trim();
+  if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';return}
+  if(!confirm('Push worker to all '+hfSpaces.length+' spaces?'))return;
+  $('hfStatus').textContent='Pushing...';
+  try{
+    const r=await fetch(API+'/api/hf/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});
+    const d=await r.json();
+    $('hfStatus').textContent=d.message||'Done';
+  }catch(e){$('hfStatus').textContent=e.message}
+}
+async function makePrivate(){
+  const token=$('hfToken').value.trim();
+  if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';return}
+  if(!confirm('Make all spaces private?'))return;
+  $('hfStatus').textContent='Making private...';
+  try{
+    const r=await fetch(API+'/api/hf/private',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});
+    const d=await r.json();
+    $('hfStatus').textContent=d.message||'Done';
+  }catch(e){$('hfStatus').textContent=e.message}
+}const token=$('hfToken').value.trim();if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}$('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});$('hfStatus').textContent=on?'All ON':'All OFF'}catch(e){$('hfStatus').textContent=e.message}}
 refresh();refreshApply();refreshLogs();
 setInterval(refresh,8000);setInterval(refreshApply,3000);setInterval(refreshLogs,5000);
 </script>
