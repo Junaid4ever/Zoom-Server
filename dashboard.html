@@ -189,22 +189,26 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <div class="section-title">🤗 HF Spaces</div>
-      <div class="form-group">
-        <label>HF Access Token</label>
-        <input id="hfToken" type="password" placeholder="hf_xxxxxxxx" style="width:100%;"/>
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="toggleHfPanel()">
+        🔑 HF Spaces <span id="hfToggleHint" style="font-size:12px;color:var(--muted);">▾</span>
       </div>
-      <div class="form-group">
-        <label>Spaces (comma separated)</label>
-        <input id="hfSpaces" placeholder="user/space1,user/space2" style="width:100%;"/>
+      <div id="hfPanel" style="display:none;margin-top:12px;">
+        <div class="form-group">
+          <label>HF Access Token</label>
+          <div style="display:flex;gap:8px;">
+            <input id="hfToken" type="password" placeholder="hf_xxxxxxxx" style="flex:1;"/>
+            <button class="btn btn-outline" onclick="fetchSpaces()">Fetch</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin:10px 0;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="checkbox" id="hfEnableAll" onchange="hfBulk(this.checked)"/> Enable / Disable All
+          </label>
+        </div>
+        <div id="hfSpaceList" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;"></div>
+        <div id="hfStatus" style="font-size:12px;color:var(--muted);margin-top:8px;">Token daalo → Fetch</div>
+        <pre id="hfLogBox" style="background:#0f0d0c;padding:10px;border-radius:8px;max-height:140px;overflow:auto;font-size:11px;color:#fcd34d;display:none;margin-top:8px;"></pre>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <button class="btn btn-success" onclick="hfAction('enable')">▶ Enable All</button>
-        <button class="btn btn-danger" onclick="hfAction('disable')">⏸ Disable All</button>
-        <button class="btn btn-outline" onclick="hfLogs()">📋 Fetch Logs</button>
-      </div>
-      <div id="hfStatus" style="font-size:13px;color:var(--muted);margin-bottom:8px;">Token + spaces daalo</div>
-      <pre id="hfLogBox" style="background:#0f0d0c;padding:10px;border-radius:8px;max-height:160px;overflow:auto;font-size:12px;color:#fcd34d;display:none;"></pre>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:16px;">
@@ -301,35 +305,61 @@ async function loadBackup(){
   show(r.ok?'Backup loaded as active':'No backup or fail', r.ok?'ok':'err');
   setTimeout(refresh,400);
 }
-async function hfAction(action){
-  const token = $('hfToken').value.trim();
-  const spaces = $('hfSpaces').value.trim();
-  if(!token || !spaces) return show('Token + spaces daalo','err');
-  $('hfStatus').textContent = action + 'ing...';
-  const r = await fetch(API+'/api/hf/'+action, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({token, spaces})
-  });
-  const d = await r.json();
-  $('hfStatus').textContent = d.message || JSON.stringify(d);
-  show(d.message || action, r.ok?'ok':'err');
+let hfSpacesCache = [];
+function toggleHfPanel(){
+  const p = $('hfPanel');
+  const open = p.style.display === 'none';
+  p.style.display = open ? 'block' : 'none';
+  $('hfToggleHint').textContent = open ? '▴' : '▾';
 }
-async function hfLogs(){
+async function fetchSpaces(){
   const token = $('hfToken').value.trim();
-  const spaces = $('hfSpaces').value.trim();
-  if(!token || !spaces) return show('Token + spaces daalo','err');
-  $('hfStatus').textContent = 'Fetching logs...';
-  const r = await fetch(API+'/api/hf/logs', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({token, spaces})
+  if(!token) return show('Token daalo','err');
+  $('hfStatus').textContent = 'Fetching...';
+  const r = await fetch(API+'/api/hf/list', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({token})
   });
   const d = await r.json();
-  const box = $('hfLogBox');
-  box.style.display = 'block';
-  box.textContent = d.logs || d.message || 'No logs';
-  $('hfStatus').textContent = 'Logs updated';
+  hfSpacesCache = d.spaces || [];
+  const box = $('hfSpaceList');
+  box.innerHTML = '';
+  if(!hfSpacesCache.length){
+    box.innerHTML = '<div style="color:var(--muted);font-size:12px;">No spaces</div>';
+    $('hfStatus').textContent = d.message || 'None';
+    return;
+  }
+  hfSpacesCache.forEach(sp => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;';
+    row.innerHTML = `<span style="word-break:break-all;">${sp}</span><label style="display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" data-space="${sp}" onchange="hfToggleOne(this)"/> On</label>`;
+    box.appendChild(row);
+  });
+  $('hfStatus').textContent = hfSpacesCache.length + ' spaces';
+  show(hfSpacesCache.length + ' loaded','ok');
+}
+async function hfToggleOne(el){
+  const token = $('hfToken').value.trim();
+  const sp = el.dataset.space;
+  const action = el.checked ? 'enable' : 'disable';
+  $('hfStatus').textContent = action + ' ' + sp.split('/').pop();
+  await fetch(API+'/api/hf/'+action, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({token, spaces: sp})
+  });
+}
+async function hfBulk(on){
+  const token = $('hfToken').value.trim();
+  if(!token || !hfSpacesCache.length) return;
+  const action = on ? 'enable' : 'disable';
+  $('hfStatus').textContent = action + ' all...';
+  document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c => c.checked = on);
+  await fetch(API+'/api/hf/'+action, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({token, spaces: hfSpacesCache.join(',')})
+  });
+  $('hfStatus').textContent = action + ' all done';
+  show(action + ' all','ok');
 }
 function updateSessionUI(s){isLoggedIn=!!s.logged_in;const badge=$('sessionBadge'),st=$('sessionStatusText');
   if(isLoggedIn){badge.className='session-badge logged-in';badge.textContent='🟢 Logged In';if(st)st.textContent=s.message||'Session active'}
