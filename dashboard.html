@@ -234,7 +234,18 @@ function openTheme(){renderThemes();$('themeModal').style.display='flex'}
 function renderThemes(){const s=document.documentElement.dataset.color;$('themeOptions').innerHTML=themes.map(t=>`<button class="theme-option ${s===t.id?'active':''}" onclick="selectTheme('${t.id}')"><div class="swatch" style="background:linear-gradient(135deg,${t.color},${t.second})"></div>${t.name}</button>`).join('')}
 function selectTheme(c){document.documentElement.dataset.color=c;localStorage.setItem('zcc-color',c);renderThemes()}
 function toggleDayNight(){const n=document.documentElement.dataset.theme==='night'?'day':'night';document.documentElement.dataset.theme=n;localStorage.setItem('zcc-theme',n)}
-function openHF(){$('hfModal').style.display='flex'}
+function openHF(){
+  const saved = localStorage.getItem('hf-token') || '';
+  if(saved) $('hfToken').value = saved;
+  const lastState = localStorage.getItem('hf-all-on') === '1';
+  $('hfAllToggle').checked = lastState;
+  $('hfModal').style.display='flex';
+  if(saved && !hfSpaces.length) fetchSpaces();
+}
+function saveToken(){
+  const t = $('hfToken').value.trim();
+  if(t) localStorage.setItem('hf-token', t);
+}
 function closeModal(id){$(id).style.display='none'}
 function outsideClose(e,id){if(e.target.id===id)closeModal(id)}
 function notify(m,ok=true){$('backupStatus').textContent=m;$('backupStatus').style.color=ok?'var(--success)':'var(--danger)'}
@@ -278,7 +289,23 @@ async function refreshLogs(){try{const d=await (await fetch(API+'/api/logs?limit
 async function refreshApply(){try{const d=await (await fetch(API+'/api/session-apply-status')).json();const pct=Number(d.percent)||0;$('applyPercent').textContent=pct+'%';$('applyBar').style.width=pct+'%';$('applyDetail').textContent=d.total_workers?`${d.applied||0}/${d.total_workers} workers`:'No workers'}catch(e){}}
 async function saveBackup(){let data;const f=$('backupFile').files[0];try{const raw=f?await f.text():$('backupText').value.trim();if(!raw)throw Error('No data');data=JSON.parse(raw);if(!data.cookies)throw Error('No cookies');const r=await fetch(API+'/api/backup-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok)throw Error('Fail');notify('Backup saved')}catch(e){notify(e.message,false)}}
 async function loadBackup(){if(!confirm('Restore backup?'))return;try{const r=await fetch(API+'/api/load-backup',{method:'POST'});if(!r.ok)throw Error('Fail');notify('Restored');refresh()}catch(e){notify(e.message,false)}}
-async function fetchSpaces(){const token=$('hfToken').value.trim();if(!token){$('hfStatus').textContent='Token daalo';return}$('hfStatus').textContent='Fetching...';try{const r=await fetch(API+'/api/hf/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});const d=await r.json();hfSpaces=d.spaces||[];$('hfCount').textContent=hfSpaces.length;renderSpaces();$('hfStatus').textContent=hfSpaces.length+' spaces'}catch(e){$('hfStatus').textContent=e.message}}
+async function fetchSpaces(){
+  saveToken();
+  const token=$('hfToken').value.trim();
+  if(!token){$('hfStatus').textContent='Token daalo';return}
+  $('hfStatus').textContent='Fetching...';
+  try{
+    const r=await fetch(API+'/api/hf/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});
+    const d=await r.json();
+    hfSpaces=d.spaces||[];
+    $('hfCount').textContent=hfSpaces.length;
+    renderSpaces();
+    const lastOn = localStorage.getItem('hf-all-on')==='1';
+    document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=lastOn);
+    $('hfAllToggle').checked=lastOn;
+    $('hfStatus').textContent=hfSpaces.length+' spaces';
+  }catch(e){$('hfStatus').textContent=e.message}
+}
 function renderSpaces(){const list=$('hfSpaceList');if(!hfSpaces.length){list.innerHTML='<div class="empty">None</div>';return}list.innerHTML=hfSpaces.map((sp,i)=>`<div class="space-row"><span style="word-break:break-all;flex:1">${escapeHTML(sp)}</span><label class="toggle"><input type="checkbox" data-idx="${i}" onchange="toggleOne(this)"><span class="slider"></span></label></div>`).join('')}
 async function toggleOne(el){const token=$('hfToken').value.trim();const sp=hfSpaces[el.dataset.idx];const on=el.checked;$('hfStatus').textContent=(on?'Enabling ':'Disabling ')+sp.split('/').pop();try{await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:sp})});$('hfStatus').textContent=sp.split('/').pop()+' '+(on?'ON':'OFF')}catch(e){$('hfStatus').textContent=e.message;el.checked=!on}}
 async function pushToAll(){
@@ -304,14 +331,19 @@ async function makePrivate(){
   }catch(e){$('hfStatus').textContent=e.message}
 }
 async function hfBulk(on){
+  saveToken();
   const token=$('hfToken').value.trim();
-  if(!token||!hfSpaces.length){$('hfStatus').textContent='Fetch first';$('hfAllToggle').checked=!on;return}
-  $('hfStatus').textContent=(on?'Enabling':'Disabling')+' all...';
+  if(!token){$('hfStatus').textContent='Token daalo';$('hfAllToggle').checked=!on;return}
+  if(!hfSpaces.length){ await fetchSpaces(); }
+  if(!hfSpaces.length){$('hfStatus').textContent='No spaces';$('hfAllToggle').checked=!on;return}
+  localStorage.setItem('hf-all-on', on?'1':'0');
+  $('hfStatus').textContent=(on?'Enabling':'Disabling')+' '+hfSpaces.length+' spaces...';
   document.querySelectorAll('#hfSpaceList input[type=checkbox]').forEach(c=>c.checked=on);
   try{
-    await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});
-    $('hfStatus').textContent=on?'All ON':'All OFF';
-  }catch(e){$('hfStatus').textContent=e.message}
+    const r = await fetch(API+'/api/hf/'+(on?'enable':'disable'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,spaces:hfSpaces.join(',')})});
+    const d = await r.json();
+    $('hfStatus').textContent = on ? 'All ON ✓' : 'All OFF ✓';
+  }catch(e){$('hfStatus').textContent=e.message;$('hfAllToggle').checked=!on}
 }
 refresh();refreshApply();refreshLogs();
 setInterval(refresh,8000);setInterval(refreshApply,3000);setInterval(refreshLogs,5000);
