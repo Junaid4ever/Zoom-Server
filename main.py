@@ -383,17 +383,20 @@ async def hf_list(request: Request):
         raise HTTPException(400, "Token required")
     try:
         async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as c:
-            r = await c.get("https://huggingface.co/api/spaces")
+            # Get username
+            who = await c.get("https://huggingface.co/api/whoami-v2")
+            if who.status_code != 200:
+                return {"spaces": [], "message": f"Auth fail {who.status_code}"}
+            username = who.json().get("name") or ""
+            if not username:
+                return {"spaces": [], "message": "No username"}
+            # Fetch only this user's spaces
+            r = await c.get(f"https://huggingface.co/api/spaces?author={username}&limit=100")
             if r.status_code != 200:
-                return {"spaces": [], "message": f"HF error {r.status_code}"}
+                return {"spaces": [], "message": f"Spaces error {r.status_code}"}
             data = r.json()
-            # Filter to user's own spaces (author matches or private)
-            spaces = []
-            for s in data:
-                sid = s.get("id") or ""
-                if sid:
-                    spaces.append(sid)
-            return {"spaces": spaces[:50], "message": f"{len(spaces)} spaces"}
+            spaces = [s.get("id") for s in data if s.get("id")]
+            return {"spaces": spaces, "message": f"{len(spaces)} spaces of {username}"}
     except Exception as e:
         return {"spaces": [], "message": str(e)[:120]}
 
