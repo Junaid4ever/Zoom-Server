@@ -322,14 +322,12 @@ async def push_session_github(data: dict):
 @app.post("/api/update-session")
 async def update_session(request: Request):
     global session_locked
-    if session_locked:
-        raise HTTPException(423, "Session locked. Unlock first to replace JSON.")
     data = await request.json()
     if not isinstance(data, dict) or "cookies" not in data:
         raise HTTPException(400, "Invalid JSON")
+    # Allow update even if locked — user can replace anytime
     with open(SESSION_FILE, "w") as f:
         json.dump(data, f, indent=2)
-    # Also save as backup
     try:
         with open(BACKUP_FILE, "w") as f:
             json.dump(data, f)
@@ -337,21 +335,82 @@ async def update_session(request: Request):
         pass
     session_locked = True
     session_apply.clear()
-    session_status.update({"logged_in": True, "message": "Session locked ✓", "last_checked": now_ist().isoformat()})
-    add_log("-", f"✅ Session saved ({len(data.get('cookies') or [])} cookies) — locked", "ok")
+    session_status.update({"logged_in": True, "message": "Session updated ✓", "last_checked": now_ist().isoformat()})
+    add_log("-", f"✅ Session saved ({len(data.get('cookies') or [])} cookies)", "ok")
     save_state()
-    connected = 0
     for wid, info in workers.items():
         if info.get("sid"):
-            connected += 1
             session_apply[wid] = {"ok": False, "ts": None, "cookies": 0}
             await sio.emit("session_payload", {"session": data, "locked": True}, to=info["sid"])
-    return {
-        "success": True,
-        "locked": True,
-        "workers_notified": connected,
-        "message": "Session saved, locked, sent to workers",
-    }
+    return {"success": True, "locked": True, "message": "Session saved and sent to workers"}
+
+
+@app.post("/api/keeper-update-session")
+async def keeper_update_session(request: Request):
+    """Auto session update from Session Keeper (bypasses lock)."""
+    global session_locked
+    secret = request.headers.get("X-Keeper-Secret", "")
+    expected = os.environ.get("KEEPER_SECRET", "keeper-secret-change-me")
+    if secret != expected:
+        raise HTTPException(403, "Invalid keeper secret")
+    data = await request.json()
+    if not isinstance(data, dict) or "cookies" not in data:
+        raise HTTPException(400, "Invalid JSON")
+    with open(SESSION_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+    try:
+        with open(BACKUP_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+    session_locked = True
+    session_apply.clear()
+    session_status.update({"logged_in": True, "message": "Keeper updated ✓", "last_checked": now_ist().isoformat()})
+    add_log("-", f"🔄 Keeper updated session ({len(data.get('cookies') or [])} cookies)", "ok")
+    save_state()
+    for wid, info in workers.items():
+        if info.get("sid"):
+            session_apply[wid] = {"ok": False, "ts": None, "cookies": 0}
+            await sio.emit("session_payload", {"session": data, "locked": True}, to=info["sid"])
+    return {"success": True, "message": "Session updated by keeper"}
+
+
+@app.post("/api/hf/{action}")
+async def hf_control(action: str, request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    spaces = [s.strip() for s in (body.get("spaces") or "").split(",") if s.strip()]
+    if not token:
+        raise HTTPException(400, "Token required")
+    if not spaces:
+        return {"success": False, "message": "Spaces list empty"}
+    results = []
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as c:
+        for sp in spaces:
+            try:
+                if action == "disable":
+                    r = await c.post(f"https://huggingface.co/api/spaces/{sp}/pause")
+                else:
+                    r = await c.post(f"https://huggingface.co/api/spaces/{sp}/restart")
+                results.append({"space": sp, "status": r.status_code})
+            except Exception as e:
+                results.append({"space": sp, "error": str(e)[:80]})
+    return {"success": True, "message": f"{action} → {len(spaces)} spaces", "results": results}
+
+@app.post("/api/hf/logs")
+async def hf_logs(request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    spaces = [s.strip() for s in (body.get("spaces") or "").split(",") if s.strip()]
+    if not token or not spaces:
+        return {"logs": "Token + spaces required"}
+    sp = spaces[0]
+    try:
+        async with httpx.AsyncClient(timeout=20, headers={"Authorization": f"Bearer {token}"}) as c:
+            r = await c.get(f"https://huggingface.co/api/spaces/{sp}/logs")
+            return {"logs": r.text[:4000] if r.status_code == 200 else f"Error {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"logs": str(e)}
 
 @app.post("/api/backup-session")
 async def save_backup(request: Request):
